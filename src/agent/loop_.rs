@@ -4,7 +4,7 @@
 //! Synchronous, blocking, single-threaded. Perfect for ESP32.
 
 use crate::agent::session::Session;
-use crate::agent::types::{ContentBlock, Message, StopReason};
+use crate::agent::types::{ContentBlock, Message};
 use crate::config;
 use crate::llm::{CompletionRequest, LlmProvider};
 use crate::tools::ToolRegistry;
@@ -15,8 +15,8 @@ use log::{debug, info, warn};
 pub struct AgentResponse {
     pub text: String,
     pub tool_rounds: u32,
-    pub input_tokens: u32,
-    pub output_tokens: u32,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
 }
 
 /// Run the agent loop for a single user message.
@@ -37,8 +37,8 @@ pub fn run(
 
     let tool_defs = tools.tool_definitions();
     let mut tool_rounds: u32 = 0;
-    let mut total_input: u32 = 0;
-    let mut total_output: u32 = 0;
+    let mut total_input: u64 = 0;
+    let mut total_output: u64 = 0;
 
     loop {
         let system = session.system_prompt();
@@ -52,8 +52,8 @@ pub fn run(
         debug!("Calling LLM (round {})", tool_rounds + 1);
         let response = llm.complete(&request)?;
 
-        total_input += response.usage.input_tokens;
-        total_output += response.usage.output_tokens;
+        total_input += response.usage.input_tokens as u64;
+        total_output += response.usage.output_tokens as u64;
 
         // Push full assistant response
         session.push_assistant(Message::assistant(response.content.clone()));
@@ -68,7 +68,7 @@ pub fn run(
             })
             .collect();
 
-        if tool_uses.is_empty() || response.stop_reason == Some(StopReason::EndTurn) {
+        if tool_uses.is_empty() {
             // Done — extract text
             let text = response
                 .content
@@ -119,6 +119,11 @@ pub fn run(
 
         if tool_rounds >= config::MAX_TOOL_ITERATIONS {
             warn!("Max tool iterations ({})", config::MAX_TOOL_ITERATIONS);
+            // Push a synthetic assistant message so the session doesn't end
+            // with dangling tool_result messages (API requires assistant after tool_result)
+            session.push_assistant(Message::assistant_text(
+                "I've reached the maximum number of tool iterations for this request."
+            ));
             bail!("exceeded maximum tool iterations");
         }
     }

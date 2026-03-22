@@ -19,7 +19,7 @@ pub trait LlmProvider {
     fn complete(&self, request: &CompletionRequest) -> Result<ApiResponse>;
 
     /// Summarize a conversation for compaction.
-    fn summarize(&self, _messages: &[Message], system_context: &str) -> Result<String> {
+    fn summarize(&self, messages: &[Message], system_context: &str) -> Result<String> {
         let summary_system = format!(
             "You are summarizing a conversation for memory compaction on a constrained device. \
              Preserve: decisions made, current hardware state, active schedules, \
@@ -27,9 +27,13 @@ pub trait LlmProvider {
              Original context: {system_context}"
         );
 
-        let summary_messages = vec![Message::user(
-            "Summarize the conversation so far. Focus on what matters for continuity.",
-        )];
+        // Build messages: include the actual conversation, then a user prompt to summarize
+        let mut summary_messages: Vec<Message> = messages.to_vec();
+        summary_messages.push(Message::user(
+            "Summarize the conversation above. Focus on what matters for continuity: \
+             decisions made, current hardware state, active schedules, problems detected, \
+             user preferences.",
+        ));
 
         let empty_tools = Value::Array(Vec::new());
         let req = CompletionRequest {

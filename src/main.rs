@@ -38,6 +38,7 @@ use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::hal::peripherals::Peripherals;
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use esp_idf_svc::sys::link_patches;
+use anyhow::Context;
 use log::{error, info, warn};
 use std::thread;
 use std::time::Duration;
@@ -105,7 +106,7 @@ fn run() -> anyhow::Result<()> {
     // Set up Telegram client
     let chat_id: i64 = config::TELEGRAM_CHAT_ID
         .parse()
-        .expect("TELEGRAM_CHAT_ID must be a number");
+        .context("TELEGRAM_CHAT_ID must be a valid number")?;
 
     let mut telegram = TelegramClient::new(config::TELEGRAM_BOT_TOKEN, chat_id);
 
