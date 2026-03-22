@@ -1,0 +1,7 @@
+/target
+/.embuild
+/.env
+*.swp
+*.swo
+*~
+.DS_Store

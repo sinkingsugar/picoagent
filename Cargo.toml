@@ -1,0 +1,40 @@
+[package]
+name = "picoagent"
+version = "0.1.0"
+authors = ["Giovanni Petrantoni <7008900+sinkingsugar@users.noreply.github.com>"]
+edition = "2021"
+resolver = "2"
+rust-version = "1.77"
+description = "AI-OS for ESP32 — a minimal agent runtime with extensible tools"
+license = "MIT"
+
+[[bin]]
+name = "picoagent"
+harness = false
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dev]
+debug = true
+opt-level = "z"
+
+[dependencies]
+log = "0.4"
+esp-idf-svc = { version = "0.51", features = ["experimental"] }
+esp-idf-hal = "0.45"
+embedded-hal = "1.0"
+serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
+serde_json = { version = "1", default-features = false, features = ["alloc"] }
+anyhow = "1.0"
+heapless = "0.8"
+
+[build-dependencies]
+embuild = "0.33"
+
+[package.metadata.esp-idf-sys]
+esp_idf_partition_table = "partitions.csv"

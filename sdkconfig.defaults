@@ -1,0 +1,23 @@
+# Rust often needs a bit of an extra main task stack size compared to C (the default is 3K)
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=65536
+
+# WiFi buffers
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=10
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=32
+
+# HTTP Client
+CONFIG_ESP_HTTP_CLIENT_ENABLE_HTTPS=y
+
+# Flash size (8MB for Freenove ESP32-S3 WROOM)
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+
+# Partition table
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# Watchdog — relax for long LLM API calls
+# Max allowed is 60s; we rely on HTTP timeouts (90s) so disable WDT on idle tasks
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=60
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=n
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1=n
