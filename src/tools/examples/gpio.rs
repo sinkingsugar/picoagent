@@ -112,8 +112,20 @@ impl<'a> Tool for GpioTool<'a> {
                     .ok_or_else(|| anyhow::anyhow!("unknown pin: {pin_name}"))?;
 
                 let level = match pin {
-                    GpioPin::Input(d) => if d.is_high() { "high" } else { "low" },
-                    GpioPin::Output(d) => if d.is_set_high() { "high" } else { "low" },
+                    GpioPin::Input(d) => {
+                        if d.is_high() {
+                            "high"
+                        } else {
+                            "low"
+                        }
+                    }
+                    GpioPin::Output(d) => {
+                        if d.is_set_high() {
+                            "high"
+                        } else {
+                            "low"
+                        }
+                    }
                 };
 
                 Ok(ToolOutput::ok(format!("{pin_name}: {level}")))

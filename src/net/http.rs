@@ -34,7 +34,12 @@ pub fn get(url: &str, timeout_secs: u64) -> Result<(u16, String)> {
 }
 
 /// Perform an HTTP POST with a JSON body and return the response.
-pub fn post_json(url: &str, body: &str, extra_headers: &[(&str, &str)], timeout_secs: u64) -> Result<(u16, String)> {
+pub fn post_json(
+    url: &str,
+    body: &str,
+    extra_headers: &[(&str, &str)],
+    timeout_secs: u64,
+) -> Result<(u16, String)> {
     let mut client = make_connection(timeout_secs)?;
 
     let content_length = body.len().to_string();

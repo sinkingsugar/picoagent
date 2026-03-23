@@ -603,8 +603,7 @@ impl<
                 self.platform.spi_init(clk, mosi, miso, cs)?;
             }
             Op::PSpiTransfer => {
-                let buf_in_idx =
-                    self.ds.pop()?.as_buf_index().ok_or(VmError::TypeMismatch)?;
+                let buf_in_idx = self.ds.pop()?.as_buf_index().ok_or(VmError::TypeMismatch)?;
                 let in_data = self.buffers.get(buf_in_idx).ok_or(VmError::TypeMismatch)?;
                 let len = in_data.len();
                 // Copy input to a temp buffer to avoid double-borrow
@@ -612,8 +611,10 @@ impl<
                 let copy_len = len.min(tmp.len());
                 tmp[..copy_len].copy_from_slice(&in_data[..copy_len]);
                 let buf_out_idx = self.buffers.alloc(copy_len)?;
-                let out_data =
-                    self.buffers.get_mut(buf_out_idx).ok_or(VmError::TypeMismatch)?;
+                let out_data = self
+                    .buffers
+                    .get_mut(buf_out_idx)
+                    .ok_or(VmError::TypeMismatch)?;
                 self.platform.spi_transfer(&tmp[..copy_len], out_data)?;
                 self.ds.push(Value::Buf(buf_out_idx))?;
             }
@@ -661,30 +662,24 @@ impl<
             // --- Platform: MQTT ---
             Op::PMqttInit => {
                 let port = self.ds.pop()?.as_int();
-                let broker_idx =
-                    self.ds.pop()?.as_str_index().ok_or(VmError::TypeMismatch)?;
+                let broker_idx = self.ds.pop()?.as_str_index().ok_or(VmError::TypeMismatch)?;
                 let broker = self.strings.get(broker_idx).ok_or(VmError::UnknownWord)?;
                 self.platform.mqtt_init(broker, port)?;
             }
             Op::PMqttPub => {
-                let payload_idx =
-                    self.ds.pop()?.as_str_index().ok_or(VmError::TypeMismatch)?;
-                let topic_idx =
-                    self.ds.pop()?.as_str_index().ok_or(VmError::TypeMismatch)?;
+                let payload_idx = self.ds.pop()?.as_str_index().ok_or(VmError::TypeMismatch)?;
+                let topic_idx = self.ds.pop()?.as_str_index().ok_or(VmError::TypeMismatch)?;
                 let topic = self.strings.get(topic_idx).ok_or(VmError::UnknownWord)?;
-                let payload =
-                    self.strings.get(payload_idx).ok_or(VmError::UnknownWord)?;
+                let payload = self.strings.get(payload_idx).ok_or(VmError::UnknownWord)?;
                 self.platform.mqtt_pub(topic, payload)?;
             }
             Op::PMqttSub => {
-                let topic_idx =
-                    self.ds.pop()?.as_str_index().ok_or(VmError::TypeMismatch)?;
+                let topic_idx = self.ds.pop()?.as_str_index().ok_or(VmError::TypeMismatch)?;
                 let topic = self.strings.get(topic_idx).ok_or(VmError::UnknownWord)?;
                 self.platform.mqtt_sub(topic)?;
             }
             Op::PMqttUnsub => {
-                let topic_idx =
-                    self.ds.pop()?.as_str_index().ok_or(VmError::TypeMismatch)?;
+                let topic_idx = self.ds.pop()?.as_str_index().ok_or(VmError::TypeMismatch)?;
                 let topic = self.strings.get(topic_idx).ok_or(VmError::UnknownWord)?;
                 self.platform.mqtt_unsub(topic)?;
             }
@@ -730,8 +725,7 @@ impl<
             // --- Platform: OTA ---
             Op::POtaRecv => self.platform.ota_recv()?,
             Op::POtaLoad => {
-                let prog_idx =
-                    self.ds.pop()?.as_str_index().ok_or(VmError::TypeMismatch)?;
+                let prog_idx = self.ds.pop()?.as_str_index().ok_or(VmError::TypeMismatch)?;
                 let prog = self.strings.get(prog_idx).ok_or(VmError::UnknownWord)?;
                 self.platform.ota_load(prog)?;
             }
@@ -752,8 +746,7 @@ impl<
             self.ds
                 .push(Value::F(float_op(a.as_float(), b.as_float())))?;
         } else {
-            self.ds
-                .push(Value::I(int_op(a.as_int(), b.as_int())))?;
+            self.ds.push(Value::I(int_op(a.as_int(), b.as_int())))?;
         }
         Ok(())
     }
@@ -800,7 +793,11 @@ impl Iterator for ActionDrain {
 fn format_i32(v: i32, buf: &mut [u8; 12]) -> &str {
     let negative = v < 0;
     // Work in u32 to handle i32::MIN correctly (wrapping_neg of MIN is MIN).
-    let mut n: u32 = if negative { (v as u32).wrapping_neg() } else { v as u32 };
+    let mut n: u32 = if negative {
+        (v as u32).wrapping_neg()
+    } else {
+        v as u32
+    };
     let mut pos = buf.len();
 
     if n == 0 {

@@ -38,7 +38,11 @@ impl ContentBlock {
         Self::Text { text: text.into() }
     }
 
-    pub fn tool_result(tool_use_id: impl Into<String>, content: impl Into<String>, is_error: bool) -> Self {
+    pub fn tool_result(
+        tool_use_id: impl Into<String>,
+        content: impl Into<String>,
+        is_error: bool,
+    ) -> Self {
         Self::ToolResult {
             tool_use_id: tool_use_id.into(),
             content: content.into(),

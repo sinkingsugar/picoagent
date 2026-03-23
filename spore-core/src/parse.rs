@@ -105,49 +105,154 @@ pub fn parse<const SB: usize, const SC: usize, const DN: usize>(
             }
 
             // --- Stack ---
-            "DUP" => { ops[len] = Op::Dup; len += 1; }
-            "DROP" => { ops[len] = Op::Drop; len += 1; }
-            "SWAP" => { ops[len] = Op::Swap; len += 1; }
-            "OVER" => { ops[len] = Op::Over; len += 1; }
-            "ROT" => { ops[len] = Op::Rot; len += 1; }
-            "NIP" => { ops[len] = Op::Nip; len += 1; }
-            "TUCK" => { ops[len] = Op::Tuck; len += 1; }
-            "2DUP" => { ops[len] = Op::TwoDup; len += 1; }
-            "2DROP" => { ops[len] = Op::TwoDrop; len += 1; }
-            "DEPTH" => { ops[len] = Op::Depth; len += 1; }
+            "DUP" => {
+                ops[len] = Op::Dup;
+                len += 1;
+            }
+            "DROP" => {
+                ops[len] = Op::Drop;
+                len += 1;
+            }
+            "SWAP" => {
+                ops[len] = Op::Swap;
+                len += 1;
+            }
+            "OVER" => {
+                ops[len] = Op::Over;
+                len += 1;
+            }
+            "ROT" => {
+                ops[len] = Op::Rot;
+                len += 1;
+            }
+            "NIP" => {
+                ops[len] = Op::Nip;
+                len += 1;
+            }
+            "TUCK" => {
+                ops[len] = Op::Tuck;
+                len += 1;
+            }
+            "2DUP" => {
+                ops[len] = Op::TwoDup;
+                len += 1;
+            }
+            "2DROP" => {
+                ops[len] = Op::TwoDrop;
+                len += 1;
+            }
+            "DEPTH" => {
+                ops[len] = Op::Depth;
+                len += 1;
+            }
 
             // --- Arithmetic ---
-            "ADD" => { ops[len] = Op::Add; len += 1; }
-            "SUB" => { ops[len] = Op::Sub; len += 1; }
-            "MUL" => { ops[len] = Op::Mul; len += 1; }
-            "DIV" => { ops[len] = Op::Div; len += 1; }
-            "MOD" => { ops[len] = Op::Mod; len += 1; }
-            "ABS" => { ops[len] = Op::Abs; len += 1; }
-            "MIN" => { ops[len] = Op::Min; len += 1; }
-            "MAX" => { ops[len] = Op::Max; len += 1; }
-            "NEG" => { ops[len] = Op::Neg; len += 1; }
+            "ADD" => {
+                ops[len] = Op::Add;
+                len += 1;
+            }
+            "SUB" => {
+                ops[len] = Op::Sub;
+                len += 1;
+            }
+            "MUL" => {
+                ops[len] = Op::Mul;
+                len += 1;
+            }
+            "DIV" => {
+                ops[len] = Op::Div;
+                len += 1;
+            }
+            "MOD" => {
+                ops[len] = Op::Mod;
+                len += 1;
+            }
+            "ABS" => {
+                ops[len] = Op::Abs;
+                len += 1;
+            }
+            "MIN" => {
+                ops[len] = Op::Min;
+                len += 1;
+            }
+            "MAX" => {
+                ops[len] = Op::Max;
+                len += 1;
+            }
+            "NEG" => {
+                ops[len] = Op::Neg;
+                len += 1;
+            }
 
             // --- Comparison ---
-            "EQ" => { ops[len] = Op::Eq; len += 1; }
-            "NEQ" => { ops[len] = Op::Neq; len += 1; }
-            "GT" => { ops[len] = Op::Gt; len += 1; }
-            "LT" => { ops[len] = Op::Lt; len += 1; }
-            "GTE" => { ops[len] = Op::Gte; len += 1; }
-            "LTE" => { ops[len] = Op::Lte; len += 1; }
+            "EQ" => {
+                ops[len] = Op::Eq;
+                len += 1;
+            }
+            "NEQ" => {
+                ops[len] = Op::Neq;
+                len += 1;
+            }
+            "GT" => {
+                ops[len] = Op::Gt;
+                len += 1;
+            }
+            "LT" => {
+                ops[len] = Op::Lt;
+                len += 1;
+            }
+            "GTE" => {
+                ops[len] = Op::Gte;
+                len += 1;
+            }
+            "LTE" => {
+                ops[len] = Op::Lte;
+                len += 1;
+            }
 
             // --- Logic ---
-            "AND" => { ops[len] = Op::And; len += 1; }
-            "OR" => { ops[len] = Op::Or; len += 1; }
-            "NOT" => { ops[len] = Op::Not; len += 1; }
-            "XOR" => { ops[len] = Op::Xor; len += 1; }
-            "SHL" => { ops[len] = Op::Shl; len += 1; }
-            "SHR" => { ops[len] = Op::Shr; len += 1; }
+            "AND" => {
+                ops[len] = Op::And;
+                len += 1;
+            }
+            "OR" => {
+                ops[len] = Op::Or;
+                len += 1;
+            }
+            "NOT" => {
+                ops[len] = Op::Not;
+                len += 1;
+            }
+            "XOR" => {
+                ops[len] = Op::Xor;
+                len += 1;
+            }
+            "SHL" => {
+                ops[len] = Op::Shl;
+                len += 1;
+            }
+            "SHR" => {
+                ops[len] = Op::Shr;
+                len += 1;
+            }
 
             // --- Type conversion ---
-            "I>F" => { ops[len] = Op::ItoF; len += 1; }
-            "F>I" => { ops[len] = Op::FtoI; len += 1; }
-            "I>STR" => { ops[len] = Op::ItoStr; len += 1; }
-            "F>STR" => { ops[len] = Op::FtoStr; len += 1; }
+            "I>F" => {
+                ops[len] = Op::ItoF;
+                len += 1;
+            }
+            "F>I" => {
+                ops[len] = Op::FtoI;
+                len += 1;
+            }
+            "I>STR" => {
+                ops[len] = Op::ItoStr;
+                len += 1;
+            }
+            "F>STR" => {
+                ops[len] = Op::FtoStr;
+                len += 1;
+            }
 
             // --- Control flow ---
             "IF" => {
@@ -378,8 +483,14 @@ pub fn parse<const SB: usize, const SC: usize, const DN: usize>(
                 len += 1;
             }
 
-            "YIELD" => { ops[len] = Op::Yield; len += 1; }
-            "YIELD_FOREVER" => { ops[len] = Op::YieldForever; len += 1; }
+            "YIELD" => {
+                ops[len] = Op::Yield;
+                len += 1;
+            }
+            "YIELD_FOREVER" => {
+                ops[len] = Op::YieldForever;
+                len += 1;
+            }
 
             "EVERY" => {
                 let interval = tokens.next().ok_or(VmError::ParseError)?;
@@ -434,54 +545,174 @@ pub fn parse<const SB: usize, const SC: usize, const DN: usize>(
             }
 
             // --- Platform ---
-            "GPIO_MODE" => { ops[len] = Op::PGpioMode; len += 1; }
-            "GPIO_WRITE" => { ops[len] = Op::PGpioWrite; len += 1; }
-            "GPIO_READ" => { ops[len] = Op::PGpioRead; len += 1; }
-            "GPIO_TOGGLE" => { ops[len] = Op::PGpioToggle; len += 1; }
-            "ADC_READ" => { ops[len] = Op::PAdcRead; len += 1; }
-            "PWM_INIT" => { ops[len] = Op::PPwmInit; len += 1; }
-            "PWM_DUTY" => { ops[len] = Op::PPwmDuty; len += 1; }
+            "GPIO_MODE" => {
+                ops[len] = Op::PGpioMode;
+                len += 1;
+            }
+            "GPIO_WRITE" => {
+                ops[len] = Op::PGpioWrite;
+                len += 1;
+            }
+            "GPIO_READ" => {
+                ops[len] = Op::PGpioRead;
+                len += 1;
+            }
+            "GPIO_TOGGLE" => {
+                ops[len] = Op::PGpioToggle;
+                len += 1;
+            }
+            "ADC_READ" => {
+                ops[len] = Op::PAdcRead;
+                len += 1;
+            }
+            "PWM_INIT" => {
+                ops[len] = Op::PPwmInit;
+                len += 1;
+            }
+            "PWM_DUTY" => {
+                ops[len] = Op::PPwmDuty;
+                len += 1;
+            }
 
-            "I2C_ADDR" => { ops[len] = Op::PI2cAddr; len += 1; }
-            "I2C_WRITE" => { ops[len] = Op::PI2cWrite; len += 1; }
-            "I2C_READ" => { ops[len] = Op::PI2cRead; len += 1; }
-            "I2C_WRITE_BUF" => { ops[len] = Op::PI2cWriteBuf; len += 1; }
-            "I2C_READ_BUF" => { ops[len] = Op::PI2cReadBuf; len += 1; }
-            "BME_READ" => { ops[len] = Op::PBmeRead; len += 1; }
+            "I2C_ADDR" => {
+                ops[len] = Op::PI2cAddr;
+                len += 1;
+            }
+            "I2C_WRITE" => {
+                ops[len] = Op::PI2cWrite;
+                len += 1;
+            }
+            "I2C_READ" => {
+                ops[len] = Op::PI2cRead;
+                len += 1;
+            }
+            "I2C_WRITE_BUF" => {
+                ops[len] = Op::PI2cWriteBuf;
+                len += 1;
+            }
+            "I2C_READ_BUF" => {
+                ops[len] = Op::PI2cReadBuf;
+                len += 1;
+            }
+            "BME_READ" => {
+                ops[len] = Op::PBmeRead;
+                len += 1;
+            }
 
-            "SPI_INIT" => { ops[len] = Op::PSpiInit; len += 1; }
-            "SPI_TRANSFER" => { ops[len] = Op::PSpiTransfer; len += 1; }
+            "SPI_INIT" => {
+                ops[len] = Op::PSpiInit;
+                len += 1;
+            }
+            "SPI_TRANSFER" => {
+                ops[len] = Op::PSpiTransfer;
+                len += 1;
+            }
 
-            "WIFI_CONNECT" => { ops[len] = Op::PWifiConnect; len += 1; }
-            "WIFI_STATUS" => { ops[len] = Op::PWifiStatus; len += 1; }
-            "WIFI_DISCONNECT" => { ops[len] = Op::PWifiDisconnect; len += 1; }
-            "WIFI_IP" => { ops[len] = Op::PWifiIp; len += 1; }
+            "WIFI_CONNECT" => {
+                ops[len] = Op::PWifiConnect;
+                len += 1;
+            }
+            "WIFI_STATUS" => {
+                ops[len] = Op::PWifiStatus;
+                len += 1;
+            }
+            "WIFI_DISCONNECT" => {
+                ops[len] = Op::PWifiDisconnect;
+                len += 1;
+            }
+            "WIFI_IP" => {
+                ops[len] = Op::PWifiIp;
+                len += 1;
+            }
 
-            "BLE_INIT" => { ops[len] = Op::PBleInit; len += 1; }
-            "BLE_ADVERTISE" => { ops[len] = Op::PBleAdvertise; len += 1; }
-            "BLE_STOP_ADV" => { ops[len] = Op::PBleStopAdv; len += 1; }
-            "BLE_NOTIFY" => { ops[len] = Op::PBleNotify; len += 1; }
-            "BLE_READ" => { ops[len] = Op::PBleRead; len += 1; }
+            "BLE_INIT" => {
+                ops[len] = Op::PBleInit;
+                len += 1;
+            }
+            "BLE_ADVERTISE" => {
+                ops[len] = Op::PBleAdvertise;
+                len += 1;
+            }
+            "BLE_STOP_ADV" => {
+                ops[len] = Op::PBleStopAdv;
+                len += 1;
+            }
+            "BLE_NOTIFY" => {
+                ops[len] = Op::PBleNotify;
+                len += 1;
+            }
+            "BLE_READ" => {
+                ops[len] = Op::PBleRead;
+                len += 1;
+            }
 
-            "MQTT_INIT" => { ops[len] = Op::PMqttInit; len += 1; }
-            "MQTT_PUB" => { ops[len] = Op::PMqttPub; len += 1; }
-            "MQTT_SUB" => { ops[len] = Op::PMqttSub; len += 1; }
-            "MQTT_UNSUB" => { ops[len] = Op::PMqttUnsub; len += 1; }
+            "MQTT_INIT" => {
+                ops[len] = Op::PMqttInit;
+                len += 1;
+            }
+            "MQTT_PUB" => {
+                ops[len] = Op::PMqttPub;
+                len += 1;
+            }
+            "MQTT_SUB" => {
+                ops[len] = Op::PMqttSub;
+                len += 1;
+            }
+            "MQTT_UNSUB" => {
+                ops[len] = Op::PMqttUnsub;
+                len += 1;
+            }
 
-            "DELAY_MS" => { ops[len] = Op::PDelayMs; len += 1; }
-            "MILLIS" => { ops[len] = Op::PMillis; len += 1; }
-            "DEEP_SLEEP" => { ops[len] = Op::PDeepSleep; len += 1; }
-            "REBOOT" => { ops[len] = Op::PReboot; len += 1; }
-            "NVS_GET" => { ops[len] = Op::PNvsGet; len += 1; }
-            "NVS_SET" => { ops[len] = Op::PNvsSet; len += 1; }
-            "HEAP_FREE" => { ops[len] = Op::PHeapFree; len += 1; }
-            "LOG" => { ops[len] = Op::PLog; len += 1; }
+            "DELAY_MS" => {
+                ops[len] = Op::PDelayMs;
+                len += 1;
+            }
+            "MILLIS" => {
+                ops[len] = Op::PMillis;
+                len += 1;
+            }
+            "DEEP_SLEEP" => {
+                ops[len] = Op::PDeepSleep;
+                len += 1;
+            }
+            "REBOOT" => {
+                ops[len] = Op::PReboot;
+                len += 1;
+            }
+            "NVS_GET" => {
+                ops[len] = Op::PNvsGet;
+                len += 1;
+            }
+            "NVS_SET" => {
+                ops[len] = Op::PNvsSet;
+                len += 1;
+            }
+            "HEAP_FREE" => {
+                ops[len] = Op::PHeapFree;
+                len += 1;
+            }
+            "LOG" => {
+                ops[len] = Op::PLog;
+                len += 1;
+            }
 
-            "OTA_RECV" => { ops[len] = Op::POtaRecv; len += 1; }
-            "OTA_LOAD" => { ops[len] = Op::POtaLoad; len += 1; }
+            "OTA_RECV" => {
+                ops[len] = Op::POtaRecv;
+                len += 1;
+            }
+            "OTA_LOAD" => {
+                ops[len] = Op::POtaLoad;
+                len += 1;
+            }
 
-            "NOP" => { ops[len] = Op::Nop; len += 1; }
-            "HALT" => { ops[len] = Op::Halt; len += 1; }
+            "NOP" => {
+                ops[len] = Op::Nop;
+                len += 1;
+            }
+            "HALT" => {
+                ops[len] = Op::Halt;
+                len += 1;
+            }
 
             // Unknown token — try as a word call
             other => {
@@ -525,7 +756,10 @@ fn parse_int(s: &str) -> Result<i32, VmError> {
     };
 
     // Handle hex: 0x...
-    if bytes.len() > start + 2 && bytes[start] == b'0' && (bytes[start + 1] == b'x' || bytes[start + 1] == b'X') {
+    if bytes.len() > start + 2
+        && bytes[start] == b'0'
+        && (bytes[start + 1] == b'x' || bytes[start + 1] == b'X')
+    {
         let mut result: i32 = 0;
         for &b in &bytes[start + 2..] {
             let digit = match b {

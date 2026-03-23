@@ -5,16 +5,16 @@
 
 #![no_std]
 
-pub mod value;
-pub mod op;
-pub mod stack;
-pub mod vm;
-pub mod task;
-pub mod dict;
-pub mod strings;
 pub mod buffer;
+pub mod dict;
+pub mod op;
 pub mod parse;
 pub mod platform;
+pub mod stack;
+pub mod strings;
+pub mod task;
+pub mod value;
+pub mod vm;
 
 /// VM error type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,12 +52,12 @@ pub enum VmAction {
 }
 
 // Re-exports
+pub use buffer::BufferPool;
+pub use dict::Dict;
 pub use op::Op;
+pub use parse::{parse, ParseResult};
 pub use platform::Platform;
+pub use strings::StringPool;
+pub use task::{Scheduler, Task, TaskState};
 pub use value::Value;
 pub use vm::{StepResult, Vm};
-pub use task::{Scheduler, Task, TaskState};
-pub use dict::Dict;
-pub use strings::StringPool;
-pub use buffer::BufferPool;
-pub use parse::{parse, ParseResult};

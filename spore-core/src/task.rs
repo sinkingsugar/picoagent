@@ -89,8 +89,14 @@ pub struct Scheduler<
     _phantom: core::marker::PhantomData<P>,
 }
 
-impl<P: Platform, const N: usize, const DS: usize, const RS: usize, const E: usize, const VARS: usize>
-    Scheduler<P, N, DS, RS, E, VARS>
+impl<
+        P: Platform,
+        const N: usize,
+        const DS: usize,
+        const RS: usize,
+        const E: usize,
+        const VARS: usize,
+    > Scheduler<P, N, DS, RS, E, VARS>
 {
     pub fn new() -> Self {
         Self {

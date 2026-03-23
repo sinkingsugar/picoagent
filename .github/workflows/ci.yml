@@ -26,7 +26,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: spore-core
-      - run: cargo test -p spore-core --target x86_64-unknown-linux-gnu
+      # Override rust-toolchain.toml which forces the esp channel
+      - run: cd spore-core && cargo +stable test --target x86_64-unknown-linux-gnu
 
   # Full firmware build with Xtensa toolchain
   firmware:
@@ -41,7 +42,19 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-directories: .embuild
-      - run: cargo check --release
+      # First build may fail needing partitions.csv in OUT_DIR — mirror justfile logic
+      - name: Build firmware
+        run: |
+          if ! cargo check --release 2>&1; then
+            OUT_DIR=$(find target -path "*/esp-idf-sys-*/out" -type d 2>/dev/null | head -1)
+            if [ -n "$OUT_DIR" ]; then
+              cp partitions.csv "$OUT_DIR/"
+              cargo check --release
+            else
+              echo "Build failed and couldn't find OUT_DIR"
+              exit 1
+            fi
+          fi
       - run: cargo check --release --features examples
 
   # Format check

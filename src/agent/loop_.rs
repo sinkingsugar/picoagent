@@ -122,7 +122,7 @@ pub fn run(
             // Push a synthetic assistant message so the session doesn't end
             // with dangling tool_result messages (API requires assistant after tool_result)
             session.push_assistant(Message::assistant_text(
-                "I've reached the maximum number of tool iterations for this request."
+                "I've reached the maximum number of tool iterations for this request.",
             ));
             bail!("exceeded maximum tool iterations");
         }

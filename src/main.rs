@@ -35,11 +35,11 @@ use tools::info::InfoTool;
 use tools::spore::{DeploySporeTool, SporeStatusStandalone};
 use tools::ToolRegistry;
 
+use anyhow::Context;
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::hal::peripherals::Peripherals;
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use esp_idf_svc::sys::link_patches;
-use anyhow::Context;
 use log::{error, info, warn};
 use std::thread;
 use std::time::Duration;
@@ -70,11 +70,7 @@ fn run() -> anyhow::Result<()> {
 
     // Connect WiFi
     info!("Connecting to WiFi...");
-    let mut wifi = net::wifi::WifiManager::new(
-        peripherals.modem,
-        sys_loop,
-        Some(nvs_partition),
-    )?;
+    let mut wifi = net::wifi::WifiManager::new(peripherals.modem, sys_loop, Some(nvs_partition))?;
     wifi.connect(config::WIFI_SSID, config::WIFI_PASSWORD)?;
 
     // Mount flash storage
@@ -112,10 +108,15 @@ fn run() -> anyhow::Result<()> {
 
     // Send boot message
     info!("Sending boot notification...");
-    if let Err(e) = telegram.send(chat_id, &format!(
-        "{} online\npicoagent v{}\n{} tools loaded",
-        config::DEVICE_LABEL, FIRMWARE_VERSION, tools.len()
-    )) {
+    if let Err(e) = telegram.send(
+        chat_id,
+        &format!(
+            "{} online\npicoagent v{}\n{} tools loaded",
+            config::DEVICE_LABEL,
+            FIRMWARE_VERSION,
+            tools.len()
+        ),
+    ) {
         error!("Failed to send boot message: {:?}", e);
     }
 
@@ -203,7 +204,8 @@ fn handle_command(text: &str, session: &mut Session, storage: &SpiffsStorage) ->
     match text {
         "/start" => Some(format!(
             "picoagent v{}\n{}\nSay anything to talk to the AI agent.",
-            FIRMWARE_VERSION, config::DEVICE_LABEL
+            FIRMWARE_VERSION,
+            config::DEVICE_LABEL
         )),
         "/clear" => {
             session.clear();
@@ -227,9 +229,9 @@ fn handle_command(text: &str, session: &mut Session, storage: &SpiffsStorage) ->
                 stats.total_tool_calls,
             ))
         }
-        _ if text.starts_with('/') => {
-            Some(format!("Unknown command: {text}\nAvailable: /start, /clear, /status"))
-        }
+        _ if text.starts_with('/') => Some(format!(
+            "Unknown command: {text}\nAvailable: /start, /clear, /status"
+        )),
         _ => None,
     }
 }
