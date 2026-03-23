@@ -33,6 +33,8 @@ pub enum StepResult {
 /// - `STR_COUNT`: Max interned strings (default 128)
 /// - `BUF_BYTES`: Buffer pool byte capacity (default 1024)
 /// - `BUF_COUNT`: Max allocated buffers (default 32)
+/// - `PROG`: Program capacity in ops (default 1024)
+/// - `VARS`: Variable slot count (default 64)
 pub struct Vm<
     P: Platform,
     const DS: usize = 64,
@@ -41,13 +43,15 @@ pub struct Vm<
     const STR_COUNT: usize = 128,
     const BUF_BYTES: usize = 1024,
     const BUF_COUNT: usize = 32,
+    const PROG: usize = 1024,
+    const VARS: usize = 64,
 > {
     pub ds: Stack<DS>,
     pub rs: Stack<RS>,
     pub ip: usize,
-    pub program: [Op; 1024],
+    pub program: [Op; PROG],
     pub program_len: usize,
-    pub vars: [Value; 64],
+    pub vars: [Value; VARS],
     pub strings: StringPool<STR_BYTES, STR_COUNT>,
     pub buffers: BufferPool<BUF_BYTES, BUF_COUNT>,
     pub platform: P,
@@ -72,16 +76,18 @@ impl<
         const STR_COUNT: usize,
         const BUF_BYTES: usize,
         const BUF_COUNT: usize,
-    > Vm<P, DS, RS, STR_BYTES, STR_COUNT, BUF_BYTES, BUF_COUNT>
+        const PROG: usize,
+        const VARS: usize,
+    > Vm<P, DS, RS, STR_BYTES, STR_COUNT, BUF_BYTES, BUF_COUNT, PROG, VARS>
 {
     pub fn new(platform: P) -> Self {
         Self {
             ds: Stack::new(),
             rs: Stack::new(),
             ip: 0,
-            program: [Op::Nop; 1024],
+            program: [Op::Nop; PROG],
             program_len: 0,
-            vars: [Value::I(0); 64],
+            vars: [Value::I(0); VARS],
             strings: StringPool::new(),
             buffers: BufferPool::new(),
             platform,
@@ -103,7 +109,7 @@ impl<
         self.halted = false;
         self.ds.clear();
         self.rs.clear();
-        self.vars = [Value::I(0); 64];
+        self.vars = [Value::I(0); VARS];
         self.times_sp = 0;
         self.every_sp = 0;
         self.action_count = 0;

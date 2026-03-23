@@ -52,8 +52,8 @@ Token Stream (text) → Parser → [Op] array → VM execution
 
 ### Key types
 
-- **`Vm<P, DS, RS, STR_BYTES, STR_COUNT, BUF_BYTES, BUF_COUNT>`** — the VM, generic over platform and all capacities.
-- **`Scheduler<P, N, DS, RS, E>`** — round-robin scheduler with `N` task slots and `E` event binding slots.
+- **`Vm<P, DS, RS, STR_BYTES, STR_COUNT, BUF_BYTES, BUF_COUNT, PROG, VARS>`** — the VM, generic over platform and all capacities.
+- **`Scheduler<P, N, DS, RS, E, VARS>`** — round-robin scheduler with `N` task slots, `E` event binding slots, and `VARS` variable slots per task.
 - **`VmAction`** — `StartTask(u16)`, `StopTask(u16)`, `EmitEvent(u16)`, `BindEvent { event_id, word_offset }`. VM pushes these; scheduler drains after each tick.
 
 ## Token Stream Format

@@ -27,12 +27,12 @@ pub enum TaskState {
 /// Each task has its own data/return stacks, instruction pointer,
 /// variables, and EVERY/TIMES state. Shares program memory and
 /// string pool with the VM.
-pub struct Task<const DS: usize = 64, const RS: usize = 32> {
+pub struct Task<const DS: usize = 64, const RS: usize = 32, const VARS: usize = 64> {
     pub name: u16, // string pool index
     pub ds: Stack<DS>,
     pub rs: Stack<RS>,
     pub ip: usize,
-    pub vars: [Value; 64],
+    pub vars: [Value; VARS],
     pub state: TaskState,
     /// TIMES loop counter stack.
     pub times_stack: [u32; 8],
@@ -42,14 +42,14 @@ pub struct Task<const DS: usize = 64, const RS: usize = 32> {
     pub every_sp: usize,
 }
 
-impl<const DS: usize, const RS: usize> Task<DS, RS> {
+impl<const DS: usize, const RS: usize, const VARS: usize> Task<DS, RS, VARS> {
     pub fn new(name: u16, entry: usize) -> Self {
         Self {
             name,
             ds: Stack::new(),
             rs: Stack::new(),
             ip: entry,
-            vars: [Value::I(0); 64],
+            vars: [Value::I(0); VARS],
             state: TaskState::Ready,
             times_stack: [0; 8],
             times_sp: 0,
@@ -76,8 +76,9 @@ pub struct Scheduler<
     const DS: usize = 64,
     const RS: usize = 32,
     const E: usize = 32,
+    const VARS: usize = 64,
 > {
-    pub tasks: [Option<Task<DS, RS>>; N],
+    pub tasks: [Option<Task<DS, RS, VARS>>; N],
     pub task_count: usize,
     /// Event binding table.
     bindings: [Option<EventBinding>; E],
@@ -88,8 +89,8 @@ pub struct Scheduler<
     _phantom: core::marker::PhantomData<P>,
 }
 
-impl<P: Platform, const N: usize, const DS: usize, const RS: usize, const E: usize>
-    Scheduler<P, N, DS, RS, E>
+impl<P: Platform, const N: usize, const DS: usize, const RS: usize, const E: usize, const VARS: usize>
+    Scheduler<P, N, DS, RS, E, VARS>
 {
     pub fn new() -> Self {
         Self {
@@ -104,7 +105,7 @@ impl<P: Platform, const N: usize, const DS: usize, const RS: usize, const E: usi
     }
 
     /// Add a task. Returns its index.
-    pub fn add_task(&mut self, task: Task<DS, RS>) -> Result<usize, VmError> {
+    pub fn add_task(&mut self, task: Task<DS, RS, VARS>) -> Result<usize, VmError> {
         for i in 0..N {
             if self.tasks[i].is_none() {
                 self.tasks[i] = Some(task);
@@ -142,6 +143,15 @@ impl<P: Platform, const N: usize, const DS: usize, const RS: usize, const E: usi
         event_id: u16,
         word_offset: u16,
     ) -> Result<(), VmError> {
+        // Overwrite existing binding for the same task+event (dedup)
+        for i in 0..self.binding_count {
+            if let Some(ref mut b) = self.bindings[i] {
+                if b.task_idx == task_idx && b.event_id == event_id {
+                    b.word_offset = word_offset;
+                    return Ok(());
+                }
+            }
+        }
         if self.binding_count >= E {
             return Err(VmError::TooManyEvents);
         }
@@ -187,10 +197,11 @@ impl<P: Platform, const N: usize, const DS: usize, const RS: usize, const E: usi
         const STR_COUNT: usize,
         const BUF_BYTES: usize,
         const BUF_COUNT: usize,
+        const PROG_CAP: usize,
     >(
         &mut self,
         current_task_idx: usize,
-        vm: &mut Vm<P, DS, RS, STR_BYTES, STR_COUNT, BUF_BYTES, BUF_COUNT>,
+        vm: &mut Vm<P, DS, RS, STR_BYTES, STR_COUNT, BUF_BYTES, BUF_COUNT, PROG_CAP, VARS>,
         dict: &crate::dict::Dict<DN>,
     ) -> Result<(), VmError> {
         for action in vm.drain_actions() {
@@ -207,7 +218,7 @@ impl<P: Platform, const N: usize, const DS: usize, const RS: usize, const E: usi
                                     t.state = TaskState::Ready;
                                     t.ds.clear();
                                     t.rs.clear();
-                                    t.vars = [Value::I(0); 64];
+                                    t.vars = [Value::I(0); VARS];
                                     t.times_sp = 0;
                                     t.every_sp = 0;
                                     t.every_last = [0; 8];
@@ -251,9 +262,10 @@ impl<P: Platform, const N: usize, const DS: usize, const RS: usize, const E: usi
         const STR_COUNT: usize,
         const BUF_BYTES: usize,
         const BUF_COUNT: usize,
+        const PROG_CAP: usize,
     >(
         &mut self,
-        vm: &mut Vm<P, DS, RS, STR_BYTES, STR_COUNT, BUF_BYTES, BUF_COUNT>,
+        vm: &mut Vm<P, DS, RS, STR_BYTES, STR_COUNT, BUF_BYTES, BUF_COUNT, PROG_CAP, VARS>,
         dict: &crate::dict::Dict<DN>,
         max_steps: u32,
     ) -> Result<bool, VmError> {
