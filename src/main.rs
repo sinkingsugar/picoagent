@@ -25,6 +25,7 @@ mod net;
 mod storage;
 mod telegram;
 mod tools;
+mod wdt;
 
 use agent::session::{Session, SessionConfig};
 use llm::claude::ClaudeClient;
@@ -121,17 +122,27 @@ fn run() -> anyhow::Result<()> {
 
     info!("picoagent ready — polling Telegram");
 
+    // Subscribe main task to TWDT so hangs between long operations are caught.
+    // Deregistered around telegram.poll() and agent::loop_::run() which exceed 60s.
+    wdt::subscribe();
+
     // Main loop
     loop {
+        wdt::feed();
         // Ensure WiFi
         if let Err(e) = wifi.ensure_connected() {
             error!("WiFi reconnect failed: {:?}", e);
+            wdt::unsubscribe();
             thread::sleep(Duration::from_secs(60));
+            wdt::subscribe();
             continue;
         }
 
-        // Poll Telegram
-        match telegram.poll() {
+        // Poll Telegram (long-poll blocks up to 40s)
+        wdt::unsubscribe();
+        let poll_result = telegram.poll();
+        wdt::subscribe();
+        match poll_result {
             Ok(Some(msg)) => {
                 info!("Message from {}: {}", msg.from_name, msg.text);
 
@@ -146,8 +157,11 @@ fn run() -> anyhow::Result<()> {
                     continue;
                 }
 
-                // Run agent
-                match agent::loop_::run(&msg.text, &mut session, &mut tools, &claude) {
+                // Run agent (LLM calls block up to 90s per round)
+                wdt::unsubscribe();
+                let agent_result = agent::loop_::run(&msg.text, &mut session, &mut tools, &claude);
+                wdt::subscribe();
+                match agent_result {
                     Ok(response) => {
                         info!(
                             "Response: {} chars, {} tool rounds, {}/{} tokens",

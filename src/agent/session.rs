@@ -13,6 +13,7 @@ use log::{info, warn};
 const KEEP_AFTER_COMPACT: usize = 4;
 
 /// Session configuration.
+#[derive(Clone)]
 pub struct SessionConfig {
     /// Maximum number of messages before triggering compaction.
     pub max_messages: usize,
@@ -63,7 +64,7 @@ impl Session {
 
     /// Load session from storage, or create new if none exists.
     pub fn load_or_new(storage: &dyn Storage, config: SessionConfig) -> Self {
-        match Self::load(storage, config) {
+        match Self::load(storage, config.clone()) {
             Ok(session) => {
                 info!(
                     "Restored session: {} messages, {} bytes summary",
@@ -74,7 +75,7 @@ impl Session {
             }
             Err(e) => {
                 warn!("No saved session ({}), starting fresh", e);
-                Self::new(SessionConfig::default())
+                Self::new(config)
             }
         }
     }
