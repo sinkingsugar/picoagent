@@ -155,7 +155,7 @@ impl<P: Platform, const N: usize, const DS: usize, const RS: usize, const E: usi
     }
 
     /// Dispatch pending events: wake suspended tasks that have matching bindings.
-    fn dispatch_events(&mut self) {
+    fn dispatch_events(&mut self) -> Result<(), VmError> {
         for qi in 0..self.event_queue_len {
             let eid = self.event_queue[qi];
             for bi in 0..self.binding_count {
@@ -167,7 +167,7 @@ impl<P: Platform, const N: usize, const DS: usize, const RS: usize, const E: usi
                                 || task.state == TaskState::Yielded
                             {
                                 // Wake the task and set IP to the handler word
-                                task.rs.push(Value::I(task.ip as i32)).ok();
+                                task.rs.push(Value::I(task.ip as i32))?;
                                 task.ip = binding.word_offset as usize;
                                 task.state = TaskState::Ready;
                             }
@@ -177,10 +177,12 @@ impl<P: Platform, const N: usize, const DS: usize, const RS: usize, const E: usi
             }
         }
         self.event_queue_len = 0;
+        Ok(())
     }
 
     /// Process VM actions generated during a task's execution.
     fn process_actions<
+        const DN: usize,
         const STR_BYTES: usize,
         const STR_COUNT: usize,
         const BUF_BYTES: usize,
@@ -189,8 +191,8 @@ impl<P: Platform, const N: usize, const DS: usize, const RS: usize, const E: usi
         &mut self,
         current_task_idx: usize,
         vm: &mut Vm<P, DS, RS, STR_BYTES, STR_COUNT, BUF_BYTES, BUF_COUNT>,
-        dict: &crate::dict::Dict<64>,
-    ) {
+        dict: &crate::dict::Dict<DN>,
+    ) -> Result<(), VmError> {
         for action in vm.drain_actions() {
             match action {
                 VmAction::StartTask(name_idx) => {
@@ -200,20 +202,22 @@ impl<P: Platform, const N: usize, const DS: usize, const RS: usize, const E: usi
                         if let Some(idx) = self.find_task(name_idx) {
                             if let Some(ref mut t) = self.tasks[idx] {
                                 if t.state == TaskState::Done {
-                                    // Restart it
+                                    // Restart it — fully reset state
                                     t.ip = offset as usize;
                                     t.state = TaskState::Ready;
                                     t.ds.clear();
                                     t.rs.clear();
+                                    t.vars = [Value::I(0); 64];
                                     t.times_sp = 0;
                                     t.every_sp = 0;
+                                    t.every_last = [0; 8];
                                 }
                                 // Already running — ignore
                             }
                         } else {
                             // Create new task
                             let task = Task::new(name_idx, offset as usize);
-                            let _ = self.add_task(task);
+                            self.add_task(task)?;
                         }
                     }
                 }
@@ -231,16 +235,18 @@ impl<P: Platform, const N: usize, const DS: usize, const RS: usize, const E: usi
                     event_id,
                     word_offset,
                 } => {
-                    let _ = self.bind_event(current_task_idx, event_id, word_offset);
+                    self.bind_event(current_task_idx, event_id, word_offset)?;
                 }
             }
         }
+        Ok(())
     }
 
     /// Run one round-robin tick. Each ready task gets up to `max_steps` instructions.
     ///
     /// `dict` is needed to resolve task names for START commands.
     pub fn tick<
+        const DN: usize,
         const STR_BYTES: usize,
         const STR_COUNT: usize,
         const BUF_BYTES: usize,
@@ -248,11 +254,11 @@ impl<P: Platform, const N: usize, const DS: usize, const RS: usize, const E: usi
     >(
         &mut self,
         vm: &mut Vm<P, DS, RS, STR_BYTES, STR_COUNT, BUF_BYTES, BUF_COUNT>,
-        dict: &crate::dict::Dict<64>,
+        dict: &crate::dict::Dict<DN>,
         max_steps: u32,
-    ) -> bool {
+    ) -> Result<bool, VmError> {
         // First, dispatch any pending events
-        self.dispatch_events();
+        self.dispatch_events()?;
 
         let mut any_active = false;
 
@@ -314,10 +320,10 @@ impl<P: Platform, const N: usize, const DS: usize, const RS: usize, const E: usi
             }
 
             // Process any actions the task generated
-            self.process_actions(i, vm, dict);
+            self.process_actions(i, vm, dict)?;
         }
 
-        any_active
+        Ok(any_active)
     }
 
     /// Check if any tasks are still active.

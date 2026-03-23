@@ -60,4 +60,4 @@ pub use task::{Scheduler, Task, TaskState};
 pub use dict::Dict;
 pub use strings::StringPool;
 pub use buffer::BufferPool;
-pub use parse::parse;
+pub use parse::{parse, ParseResult};

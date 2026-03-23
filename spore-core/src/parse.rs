@@ -10,11 +10,11 @@ use crate::VmError;
 
 /// Parse result: program ops and metadata.
 #[derive(Debug)]
-pub struct ParseResult {
-    pub ops: [Op; 1024],
+pub struct ParseResult<const N: usize = 1024> {
+    pub ops: [Op; N],
     pub len: usize,
-    /// Entry point offset (offset of `main` task body, or 0).
-    pub entry: usize,
+    /// Entry point offset (offset of `main` task body, or None).
+    pub entry: Option<usize>,
 }
 
 /// Fixup entry for forward references (IF→ELSE/THEN, LOOP→ENDLOOP, etc.)
@@ -25,12 +25,20 @@ struct Fixup {
     kind: FixupKind,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum FixupKind {
     IfToElseOrThen,
     ElseToThen,
     LoopToEndLoop,
     TimesToEndTimes,
+    EveryToEndEvery,
+}
+
+/// Whether we're inside a DEF or TASK block.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BlockKind {
+    Def,
+    Task,
 }
 
 /// Parse a Spore token stream into an Op sequence.
@@ -40,10 +48,13 @@ pub fn parse<const SB: usize, const SC: usize, const DN: usize>(
     input: &str,
     strings: &mut StringPool<SB, SC>,
     dict: &mut Dict<DN>,
-) -> Result<ParseResult, VmError> {
+) -> Result<ParseResult<1024>, VmError> {
     let mut ops = [Op::Nop; 1024];
     let mut len: usize = 0;
-    let mut fixup_stack: [Fixup; 64] = unsafe { core::mem::zeroed() };
+    let mut fixup_stack: [Fixup; 64] = core::array::from_fn(|_| Fixup {
+        op_idx: 0,
+        kind: FixupKind::IfToElseOrThen,
+    });
     let mut fixup_sp: usize = 0;
     // For BEGIN...UNTIL: stack of Begin offsets
     let mut begin_stack: [usize; 16] = [0; 16];
@@ -52,9 +63,9 @@ pub fn parse<const SB: usize, const SC: usize, const DN: usize>(
     let mut var_names: [u16; 64] = [0xFFFF; 64];
     let mut var_count: usize = 0;
     // Track task/word entry points
-    let mut entry: usize = 0;
+    let mut entry: Option<usize> = None;
     // Whether we're inside a DEF or TASK
-    let mut in_def = false;
+    let mut block_kind: Option<BlockKind> = None;
     let mut _def_start: usize = 0;
 
     let mut tokens = Tokenizer::new(input);
@@ -158,6 +169,9 @@ pub fn parse<const SB: usize, const SC: usize, const DN: usize>(
                 }
                 fixup_sp -= 1;
                 let fixup = &fixup_stack[fixup_sp];
+                if fixup.kind != FixupKind::IfToElseOrThen {
+                    return Err(VmError::ParseError);
+                }
                 ops[fixup.op_idx] = Op::If((len + 1) as u16); // IF jumps past ELSE
 
                 // Push ELSE fixup
@@ -209,6 +223,9 @@ pub fn parse<const SB: usize, const SC: usize, const DN: usize>(
                 }
                 fixup_sp -= 1;
                 let fixup = &fixup_stack[fixup_sp];
+                if fixup.kind != FixupKind::LoopToEndLoop {
+                    return Err(VmError::ParseError);
+                }
                 let loop_start = fixup.op_idx;
                 // ENDLOOP jumps back to Loop (which is a no-op, then body re-executes)
                 ops[len] = Op::EndLoop(loop_start as u16);
@@ -253,6 +270,9 @@ pub fn parse<const SB: usize, const SC: usize, const DN: usize>(
                 }
                 fixup_sp -= 1;
                 let fixup = &fixup_stack[fixup_sp];
+                if fixup.kind != FixupKind::TimesToEndTimes {
+                    return Err(VmError::ParseError);
+                }
                 let times_start = fixup.op_idx;
                 // ENDTIMES jumps back to instruction after Times
                 ops[len] = Op::EndTimes((times_start + 1) as u16);
@@ -309,40 +329,40 @@ pub fn parse<const SB: usize, const SC: usize, const DN: usize>(
             "DEF" => {
                 let name = tokens.next().ok_or(VmError::ParseError)?;
                 let name_idx = strings.intern(name)?;
-                in_def = true;
+                block_kind = Some(BlockKind::Def);
                 _def_start = len;
                 dict.define(name_idx, len as u16)?;
             }
             "END" => {
-                if !in_def {
+                if block_kind != Some(BlockKind::Def) {
                     return Err(VmError::ParseError);
                 }
                 ops[len] = Op::Return;
                 len += 1;
-                in_def = false;
+                block_kind = None;
             }
 
             // --- Tasks ---
             "TASK" => {
                 let name = tokens.next().ok_or(VmError::ParseError)?;
                 let name_idx = strings.intern(name)?;
-                in_def = true;
+                block_kind = Some(BlockKind::Task);
                 _def_start = len;
                 dict.define(name_idx, len as u16)?;
                 // Check if this is "main"
                 if let Some(s) = strings.get(name_idx) {
                     if s == "main" {
-                        entry = len;
+                        entry = Some(len);
                     }
                 }
             }
             "ENDTASK" => {
-                if !in_def {
+                if block_kind != Some(BlockKind::Task) {
                     return Err(VmError::ParseError);
                 }
                 ops[len] = Op::Halt;
                 len += 1;
-                in_def = false;
+                block_kind = None;
             }
 
             "START" => {
@@ -364,10 +384,31 @@ pub fn parse<const SB: usize, const SC: usize, const DN: usize>(
             "EVERY" => {
                 let interval = tokens.next().ok_or(VmError::ParseError)?;
                 let ms = parse_int(interval)? as u32;
-                ops[len] = Op::Every(ms);
+                if fixup_sp >= fixup_stack.len() {
+                    return Err(VmError::ProgramTooLarge);
+                }
+                fixup_stack[fixup_sp] = Fixup {
+                    op_idx: len,
+                    kind: FixupKind::EveryToEndEvery,
+                };
+                fixup_sp += 1;
+                ops[len] = Op::Every(ms, 0); // placeholder end offset
                 len += 1;
             }
             "ENDEVERY" => {
+                if fixup_sp == 0 {
+                    return Err(VmError::ParseError);
+                }
+                fixup_sp -= 1;
+                let fixup = &fixup_stack[fixup_sp];
+                if fixup.kind != FixupKind::EveryToEndEvery {
+                    return Err(VmError::ParseError);
+                }
+                let every_start = fixup.op_idx;
+                // Patch Every with offset to after ENDEVERY
+                if let Op::Every(ms, _) = ops[every_start] {
+                    ops[every_start] = Op::Every(ms, (len + 1) as u16);
+                }
                 ops[len] = Op::EndEvery;
                 len += 1;
             }
@@ -455,7 +496,7 @@ pub fn parse<const SB: usize, const SC: usize, const DN: usize>(
         }
     }
 
-    if fixup_sp != 0 || begin_sp != 0 || in_def {
+    if fixup_sp != 0 || begin_sp != 0 || block_kind.is_some() {
         return Err(VmError::ParseError);
     }
 

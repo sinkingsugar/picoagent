@@ -98,8 +98,8 @@ pub enum Op {
     Start(u16),
     /// Stop a task by name (string pool index).
     Stop(u16),
-    /// Periodic block: interval in ms, marks block start.
-    Every(u32),
+    /// Periodic block: interval in ms, offset to after ENDEVERY.
+    Every(u32, u16),
     EndEvery,
 
     // --- Events ---

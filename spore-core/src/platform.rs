@@ -75,7 +75,8 @@ pub trait Platform {
     fn wifi_disconnect(&mut self) -> PlatformResult<()> {
         Err(VmError::PlatformError)
     }
-    fn wifi_ip(&mut self) -> PlatformResult<u16> {
+    /// Returns the IP address as a packed i32 (network byte order).
+    fn wifi_ip(&mut self) -> PlatformResult<i32> {
         Err(VmError::PlatformError)
     }
 

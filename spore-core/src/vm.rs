@@ -485,21 +485,15 @@ impl<
             Op::Stop(name_idx) => {
                 self.push_action(VmAction::StopTask(name_idx))?;
             }
-            Op::Every(interval_ms) => {
+            Op::Every(interval_ms, end_offset) => {
                 let now = self.platform.millis().unwrap_or(0);
                 if self.every_sp >= self.every_last.len() {
                     return Err(VmError::StackOverflow);
                 }
                 let last = self.every_last[self.every_sp];
                 if now.wrapping_sub(last) < interval_ms {
-                    // Not time yet — skip to ENDEVERY
-                    while self.ip < self.program_len {
-                        if self.program[self.ip] == Op::EndEvery {
-                            self.ip += 1;
-                            break;
-                        }
-                        self.ip += 1;
-                    }
+                    // Not time yet — jump past ENDEVERY using resolved offset
+                    self.ip = end_offset as usize;
                 } else {
                     self.every_last[self.every_sp] = now;
                     self.every_sp += 1;
@@ -630,8 +624,8 @@ impl<
                 self.platform.wifi_disconnect()?;
             }
             Op::PWifiIp => {
-                let idx = self.platform.wifi_ip()?;
-                self.ds.push(Value::S(idx))?;
+                let ip = self.platform.wifi_ip()?;
+                self.ds.push(Value::I(ip))?;
             }
 
             // --- Platform: BLE ---

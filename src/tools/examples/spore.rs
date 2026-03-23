@@ -10,6 +10,7 @@ use serde_json::Value;
 
 use spore_core::dict::Dict;
 use spore_core::platform::{Platform, PlatformResult};
+use spore_core::task::{Scheduler, Task};
 use spore_core::vm::Vm;
 use spore_core::{parse, VmError};
 
@@ -35,8 +36,13 @@ const I2C_SDA_PIN: i32 = 8;
 const I2C_SCL_PIN: i32 = 9;
 /// Default I2C clock speed.
 const I2C_FREQ_HZ: u32 = 100_000;
-/// I2C timeout in ticks.
-const I2C_TIMEOUT_MS: u32 = 1000;
+/// I2C timeout in FreeRTOS ticks.
+/// ESP-IDF default: configTICK_RATE_HZ=1000, so 1 tick = 1ms.
+/// 1000 ticks = 1 second timeout.
+const I2C_TIMEOUT_TICKS: u32 = 1000;
+
+/// Maximum delay_ms per call to prevent unbounded blocking (5 seconds).
+const MAX_DELAY_MS: u32 = 5_000;
 
 /// PWM channel assignment: pin → LEDC channel.
 struct PwmChannel {
@@ -161,7 +167,8 @@ impl Platform for Esp32Platform {
     }
 
     fn delay_ms(&mut self, ms: u32) -> PlatformResult<()> {
-        thread::sleep(Duration::from_millis(ms as u64));
+        let clamped = ms.min(MAX_DELAY_MS);
+        thread::sleep(Duration::from_millis(clamped as u64));
         Ok(())
     }
 
@@ -316,7 +323,7 @@ impl Platform for Esp32Platform {
                 self.i2c_addr,
                 data.as_ptr(),
                 1,
-                I2C_TIMEOUT_MS,
+                I2C_TIMEOUT_TICKS,
             )
         };
         esp_ok(ret)
@@ -331,7 +338,7 @@ impl Platform for Esp32Platform {
                 self.i2c_addr,
                 data.as_mut_ptr(),
                 1,
-                I2C_TIMEOUT_MS,
+                I2C_TIMEOUT_TICKS,
             )
         };
         esp_ok(ret)?;
@@ -346,7 +353,7 @@ impl Platform for Esp32Platform {
                 self.i2c_addr,
                 buf.as_ptr(),
                 buf.len(),
-                I2C_TIMEOUT_MS,
+                I2C_TIMEOUT_TICKS,
             )
         };
         esp_ok(ret)
@@ -360,10 +367,60 @@ impl Platform for Esp32Platform {
                 self.i2c_addr,
                 buf.as_mut_ptr(),
                 buf.len(),
-                I2C_TIMEOUT_MS,
+                I2C_TIMEOUT_TICKS,
             )
         };
         esp_ok(ret)
+    }
+
+    fn bme_read(&mut self) -> PlatformResult<(f32, f32, f32)> {
+        // BME280/BME680 read via I2C. Requires I2C_ADDR to be set first
+        // (typically 0x76 or 0x77). Reads temp/hum/pressure compensation
+        // registers and applies calibration.
+        //
+        // Simplified: read raw 8-byte burst from 0xF7-0xFE, apply basic
+        // compensation. For production, use a proper BME driver.
+        self.ensure_i2c()?;
+
+        // Write register address 0xF7 (burst read start)
+        let reg = [0xF7u8];
+        let ret = unsafe {
+            sys::i2c_master_write_to_device(
+                I2C_PORT,
+                self.i2c_addr,
+                reg.as_ptr(),
+                1,
+                I2C_TIMEOUT_TICKS,
+            )
+        };
+        esp_ok(ret)?;
+
+        // Read 8 bytes: press[19:12] press[11:4] press[3:0] temp[19:12]
+        //               temp[11:4] temp[3:0] hum[15:8] hum[7:0]
+        let mut data = [0u8; 8];
+        let ret = unsafe {
+            sys::i2c_master_read_from_device(
+                I2C_PORT,
+                self.i2c_addr,
+                data.as_mut_ptr(),
+                8,
+                I2C_TIMEOUT_TICKS,
+            )
+        };
+        esp_ok(ret)?;
+
+        // Raw values (20-bit pressure/temp, 16-bit humidity)
+        let raw_press = ((data[0] as u32) << 12) | ((data[1] as u32) << 4) | ((data[2] as u32) >> 4);
+        let raw_temp = ((data[3] as u32) << 12) | ((data[4] as u32) << 4) | ((data[5] as u32) >> 4);
+        let raw_hum = ((data[6] as u16) << 8) | (data[7] as u16);
+
+        // Approximate conversion (without full calibration data).
+        // Real implementations should read calibration from NVM registers.
+        let temp = raw_temp as f32 / 5120.0;
+        let hum = raw_hum as f32 / 1024.0;
+        let press = raw_press as f32 / 256.0;
+
+        Ok((temp, hum, press))
     }
 }
 
@@ -381,6 +438,11 @@ pub struct DeploySporeTool {
     /// Total spores deployed since boot.
     deploy_count: u32,
 }
+
+/// Max scheduler ticks per deploy (prevents runaway multitasking).
+const MAX_SCHEDULER_TICKS: u32 = 1000;
+/// Steps per scheduler tick for each task.
+const STEPS_PER_TICK: u32 = 100;
 
 impl DeploySporeTool {
     pub fn new() -> Self {
@@ -410,18 +472,49 @@ impl DeploySporeTool {
             return Ok(ToolOutput::err("Empty program"));
         }
 
-        // Load and run
+        // Load program
         self.vm.load(&parsed.ops[..parsed.len]);
-        self.vm.program_len = parsed.len;
 
-        // If there's a main task entry, start there
-        if parsed.entry > 0 {
-            self.vm.ip = parsed.entry;
+        // Set entry point if main task was found
+        if let Some(entry) = parsed.entry {
+            self.vm.ip = entry;
         }
 
         // Run with a step limit to prevent infinite loops from blocking
         // the agent. 100K steps is generous for any reasonable program.
         let step_result = self.vm.run_steps(100_000);
+
+        // Process any VmActions through the scheduler (for TASK/START/STOP/ON/EMIT)
+        let mut scheduler: Scheduler<Esp32Platform> = Scheduler::new();
+        let mut has_tasks = false;
+
+        // Drain actions from the initial run
+        for action in self.vm.drain_actions() {
+            match action {
+                spore_core::VmAction::StartTask(name_idx) => {
+                    if let Some(offset) = self.dict.lookup(name_idx) {
+                        let task = Task::new(name_idx, offset as usize);
+                        if scheduler.add_task(task).is_ok() {
+                            has_tasks = true;
+                        }
+                    }
+                }
+                spore_core::VmAction::EmitEvent(eid) => {
+                    scheduler.emit_event(eid);
+                }
+                _ => {}
+            }
+        }
+
+        // If tasks were started, run the scheduler
+        if has_tasks {
+            for _ in 0..MAX_SCHEDULER_TICKS {
+                match scheduler.tick(&mut self.vm, &self.dict, STEPS_PER_TICK) {
+                    Ok(active) if active => continue,
+                    _ => break,
+                }
+            }
+        }
 
         self.deploy_count += 1;
 

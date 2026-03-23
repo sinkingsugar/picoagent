@@ -649,7 +649,7 @@ fn test_scheduler_basic() {
     let mut sched = Scheduler::<MockPlatform>::new();
     sched.add_task(Task::new(a_name, 0)).unwrap();
 
-    let active = sched.tick(&mut vm, &dict, 100);
+    let active = sched.tick(&mut vm, &dict, 100).unwrap();
     assert!(active);
 
     // Task should be Done now
@@ -683,7 +683,7 @@ fn test_scheduler_event_wakeup() {
     sched.add_task(Task::new(task_name, 2)).unwrap();
 
     // First tick: task runs On + YieldForever → Suspended
-    sched.tick(&mut vm, &dict, 100);
+    sched.tick(&mut vm, &dict, 100).unwrap();
     assert_eq!(
         sched.tasks[0].as_ref().unwrap().state,
         TaskState::Suspended
@@ -694,7 +694,7 @@ fn test_scheduler_event_wakeup() {
     sched.emit_event(evt_name);
 
     // Next tick: event wakes the task, handler pushes 99
-    sched.tick(&mut vm, &dict, 100);
+    sched.tick(&mut vm, &dict, 100).unwrap();
 
     let task = sched.tasks[0].as_ref().unwrap();
     // Task should have 99 on its stack (from handler)
@@ -751,7 +751,7 @@ fn test_parse_cactus_monitor() {
     assert!(result.is_ok(), "Cactus monitor should parse: {:?}", result.err());
 
     let result = result.unwrap();
-    assert!(result.entry > 0, "main entry should be found");
+    assert!(result.entry.is_some(), "main entry should be found");
 
     // Verify START ops exist
     let mut start_count = 0;
