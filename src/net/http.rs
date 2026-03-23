@@ -29,7 +29,7 @@ pub fn get(url: &str, timeout_secs: u64) -> Result<(u16, String)> {
     let status = client.status();
     let body = read_response_body(&mut client)?;
 
-    debug!("GET {} -> {} ({} bytes)", url, status, body.len());
+    debug!("GET -> {} ({} bytes)", status, body.len());
     Ok((status, body))
 }
 
@@ -54,9 +54,12 @@ pub fn post_json(url: &str, body: &str, extra_headers: &[(&str, &str)], timeout_
     let status = client.status();
     let body = read_response_body(&mut client)?;
 
-    debug!("POST {} -> {} ({} bytes)", url, status, body.len());
+    debug!("POST -> {} ({} bytes)", status, body.len());
     Ok((status, body))
 }
+
+/// Maximum response body size (128 KB) — protects against OOM on ESP32.
+const MAX_RESPONSE_BYTES: usize = 128 * 1024;
 
 /// Read the full response body into a String.
 fn read_response_body(client: &mut EspHttpConnection) -> Result<String> {
@@ -66,7 +69,12 @@ fn read_response_body(client: &mut EspHttpConnection) -> Result<String> {
     loop {
         match esp_idf_svc::io::Read::read(client, &mut buf) {
             Ok(0) => break,
-            Ok(n) => body.extend_from_slice(&buf[..n]),
+            Ok(n) => {
+                body.extend_from_slice(&buf[..n]);
+                if body.len() > MAX_RESPONSE_BYTES {
+                    bail!("response too large (>{} KB)", MAX_RESPONSE_BYTES / 1024);
+                }
+            }
             Err(e) => bail!("failed to read response: {e}"),
         }
     }

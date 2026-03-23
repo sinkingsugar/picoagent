@@ -46,6 +46,16 @@ impl TelegramClient {
 
         let (status, body) = http::get(&url, HTTP_TIMEOUT_SECS)?;
 
+        if status == 429 {
+            warn!("Telegram rate limited, backing off 10s");
+            std::thread::sleep(std::time::Duration::from_secs(10));
+            return Ok(None);
+        }
+        if status >= 500 {
+            warn!("Telegram server error ({status}), backing off 5s");
+            std::thread::sleep(std::time::Duration::from_secs(5));
+            return Ok(None);
+        }
         if status != 200 {
             bail!("Telegram getUpdates failed with status {status}");
         }
@@ -97,10 +107,16 @@ impl TelegramClient {
             let chunk_end = if remaining.len() <= MAX_MSG_LEN {
                 remaining.len()
             } else {
-                remaining[..MAX_MSG_LEN]
+                // Find a safe char boundary at or before MAX_MSG_LEN
+                let mut boundary = MAX_MSG_LEN;
+                while boundary > 0 && !remaining.is_char_boundary(boundary) {
+                    boundary -= 1;
+                }
+                // Try to split at a newline for cleaner chunks
+                remaining[..boundary]
                     .rfind('\n')
                     .map(|p| p + 1)
-                    .unwrap_or(MAX_MSG_LEN)
+                    .unwrap_or(boundary)
             };
 
             self.send_chunk(chat_id, &remaining[..chunk_end])?;

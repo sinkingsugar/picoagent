@@ -18,6 +18,7 @@ const MAX_FDS: usize = 5;
 /// SPIFFS storage on ESP32 flash.
 pub struct SpiffsStorage {
     _mount_path: CString,
+    _partition_label: CString,
 }
 
 impl SpiffsStorage {
@@ -58,38 +59,42 @@ impl SpiffsStorage {
 
         Ok(Self {
             _mount_path: mount_path,
+            _partition_label: partition_label,
         })
     }
 
-    fn full_path(key: &str) -> String {
-        format!("{MOUNT_POINT}/{key}")
+    fn full_path(key: &str) -> Result<String> {
+        if key.contains("..") || key.starts_with('/') {
+            bail!("invalid storage key: {key}");
+        }
+        Ok(format!("{MOUNT_POINT}/{key}"))
     }
 }
 
 impl Drop for SpiffsStorage {
     fn drop(&mut self) {
         unsafe {
-            sys::esp_vfs_spiffs_unregister(self._mount_path.as_ptr());
+            sys::esp_vfs_spiffs_unregister(self._partition_label.as_ptr());
         }
     }
 }
 
 impl Storage for SpiffsStorage {
     fn read(&self, key: &str) -> Result<String> {
-        let path = Self::full_path(key);
+        let path = Self::full_path(key)?;
         fs::read_to_string(&path)
             .with_context(|| format!("failed to read {path}"))
     }
 
     fn write(&self, key: &str, value: &str) -> Result<()> {
-        let path = Self::full_path(key);
+        let path = Self::full_path(key)?;
         debug!("Writing {} bytes to {}", value.len(), path);
         fs::write(&path, value)
             .with_context(|| format!("failed to write {path}"))
     }
 
     fn delete(&self, key: &str) -> Result<()> {
-        let path = Self::full_path(key);
+        let path = Self::full_path(key)?;
         match fs::remove_file(&path) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -98,6 +103,9 @@ impl Storage for SpiffsStorage {
     }
 
     fn exists(&self, key: &str) -> bool {
-        Path::new(&Self::full_path(key)).exists()
+        match Self::full_path(key) {
+            Ok(path) => Path::new(&path).exists(),
+            Err(_) => false,
+        }
     }
 }

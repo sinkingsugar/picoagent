@@ -134,6 +134,9 @@ pub enum StopReason {
     MaxTokens,
     #[serde(rename = "stop_sequence")]
     StopSequence,
+    /// Forward-compatible: unknown stop reasons from future API versions.
+    #[serde(other)]
+    Unknown,
 }
 
 /// Token usage from a single API call.

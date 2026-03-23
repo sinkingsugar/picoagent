@@ -63,7 +63,7 @@ impl Session {
 
     /// Load session from storage, or create new if none exists.
     pub fn load_or_new(storage: &dyn Storage, config: SessionConfig) -> Self {
-        match Self::load(storage) {
+        match Self::load(storage, config) {
             Ok(session) => {
                 info!(
                     "Restored session: {} messages, {} bytes summary",
@@ -74,19 +74,19 @@ impl Session {
             }
             Err(e) => {
                 warn!("No saved session ({}), starting fresh", e);
-                Self::new(config)
+                Self::new(SessionConfig::default())
             }
         }
     }
 
-    fn load(storage: &dyn Storage) -> Result<Self> {
+    fn load(storage: &dyn Storage, config: SessionConfig) -> Result<Self> {
         let data = storage.read("session.json")?;
         let saved: SavedSession =
             serde_json::from_str(&data).context("failed to parse saved session")?;
         Ok(Self {
             summary: saved.summary,
             messages: saved.messages,
-            config: SessionConfig::default(),
+            config,
             total_tool_calls: saved.total_tool_calls,
         })
     }
