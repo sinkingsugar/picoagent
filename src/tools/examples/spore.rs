@@ -44,10 +44,20 @@ const I2C_TIMEOUT_TICKS: u32 = 1000;
 /// Maximum delay_ms per call to prevent unbounded blocking (5 seconds).
 const MAX_DELAY_MS: u32 = 5_000;
 
-/// PWM channel assignment: pin → LEDC channel.
+/// Max LEDC timers on ESP32-S3.
+const MAX_PWM_TIMERS: usize = 4;
+
+/// PWM channel assignment: pin → LEDC channel + timer.
 struct PwmChannel {
     pin: i32,
     channel: sys::ledc_channel_t,
+    timer: sys::ledc_timer_t,
+}
+
+/// PWM timer assignment: frequency → LEDC timer.
+struct PwmTimer {
+    freq_hz: u32,
+    timer_num: sys::ledc_timer_t,
 }
 
 /// Spore platform backend for ESP32-S3.
@@ -60,6 +70,9 @@ pub struct Esp32Platform {
     /// Active PWM channels.
     pwm_channels: [Option<PwmChannel>; MAX_PWM_CHANNELS],
     pwm_count: usize,
+    /// Active PWM timers (frequency → timer mapping).
+    pwm_timers: [Option<PwmTimer>; MAX_PWM_TIMERS],
+    pwm_timer_count: usize,
     /// Current I2C target address (set by I2C_ADDR).
     i2c_addr: u8,
     /// Whether the I2C driver has been initialized.
@@ -72,6 +85,8 @@ impl Esp32Platform {
             logs: Vec::new(),
             pwm_channels: [const { None }; MAX_PWM_CHANNELS],
             pwm_count: 0,
+            pwm_timers: [const { None }; MAX_PWM_TIMERS],
+            pwm_timer_count: 0,
             i2c_addr: 0,
             i2c_initialized: false,
         }
@@ -81,12 +96,33 @@ impl Esp32Platform {
         core::mem::take(&mut self.logs)
     }
 
+    /// Find or allocate a LEDC timer for a given frequency.
+    fn find_or_alloc_pwm_timer(&mut self, freq_hz: u32) -> Option<sys::ledc_timer_t> {
+        // Reuse existing timer with the same frequency
+        for t in &self.pwm_timers {
+            if let Some(t) = t {
+                if t.freq_hz == freq_hz {
+                    return Some(t.timer_num);
+                }
+            }
+        }
+        // Allocate new timer
+        if self.pwm_timer_count >= MAX_PWM_TIMERS {
+            return None;
+        }
+        let timer_num = self.pwm_timer_count as sys::ledc_timer_t;
+        self.pwm_timers[self.pwm_timer_count] = Some(PwmTimer { freq_hz, timer_num });
+        self.pwm_timer_count += 1;
+        Some(timer_num)
+    }
+
     /// Find or allocate a LEDC channel for a pin.
-    fn find_or_alloc_pwm_channel(&mut self, pin: i32) -> Option<sys::ledc_channel_t> {
+    fn find_or_alloc_pwm_channel(&mut self, pin: i32, timer: sys::ledc_timer_t) -> Option<sys::ledc_channel_t> {
         // Check if pin already has a channel
-        for ch in &self.pwm_channels {
+        for ch in &mut self.pwm_channels {
             if let Some(c) = ch {
                 if c.pin == pin {
+                    c.timer = timer; // Update timer assignment
                     return Some(c.channel);
                 }
             }
@@ -96,7 +132,7 @@ impl Esp32Platform {
             return None;
         }
         let channel = self.pwm_count as sys::ledc_channel_t;
-        self.pwm_channels[self.pwm_count] = Some(PwmChannel { pin, channel });
+        self.pwm_channels[self.pwm_count] = Some(PwmChannel { pin, channel, timer });
         self.pwm_count += 1;
         Some(channel)
     }
@@ -218,16 +254,23 @@ impl Platform for Esp32Platform {
     // --- PWM (LEDC) ---
 
     fn pwm_init(&mut self, pin: i32, freq: i32) -> PlatformResult<()> {
-        let channel = self
-            .find_or_alloc_pwm_channel(pin)
+        let freq_hz = freq as u32;
+
+        // Find or allocate a timer for this frequency (up to 4 distinct frequencies)
+        let timer_num = self
+            .find_or_alloc_pwm_timer(freq_hz)
             .ok_or(VmError::PlatformError)?;
 
-        // Configure timer (use timer 0 for all channels — shared frequency)
+        let channel = self
+            .find_or_alloc_pwm_channel(pin, timer_num)
+            .ok_or(VmError::PlatformError)?;
+
+        // Configure timer for this frequency
         let timer_conf = sys::ledc_timer_config_t {
             speed_mode: sys::ledc_mode_t_LEDC_LOW_SPEED_MODE,
             duty_resolution: sys::ledc_timer_bit_t_LEDC_TIMER_10_BIT, // 0-1023
-            timer_num: sys::ledc_timer_t_LEDC_TIMER_0,
-            freq_hz: freq as u32,
+            timer_num,
+            freq_hz,
             clk_cfg: sys::soc_periph_ledc_clk_src_legacy_t_LEDC_AUTO_CLK,
             deconfigure: false,
         };
@@ -235,13 +278,13 @@ impl Platform for Esp32Platform {
             esp_ok(sys::ledc_timer_config(&timer_conf))?;
         }
 
-        // Configure channel
+        // Configure channel bound to the correct timer
         let channel_conf = sys::ledc_channel_config_t {
             gpio_num: pin,
             speed_mode: sys::ledc_mode_t_LEDC_LOW_SPEED_MODE,
             channel,
             intr_type: sys::ledc_intr_type_t_LEDC_INTR_DISABLE,
-            timer_sel: sys::ledc_timer_t_LEDC_TIMER_0,
+            timer_sel: timer_num,
             duty: 0,
             hpoint: 0,
             flags: unsafe { core::mem::zeroed() },
@@ -250,7 +293,7 @@ impl Platform for Esp32Platform {
             esp_ok(sys::ledc_channel_config(&channel_conf))?;
         }
 
-        info!("[spore] PWM init: pin={} freq={}Hz channel={}", pin, freq, channel);
+        info!("[spore] PWM init: pin={} freq={}Hz channel={} timer={}", pin, freq, channel, timer_num);
         Ok(())
     }
 
@@ -502,7 +545,19 @@ impl DeploySporeTool {
                 spore_core::VmAction::EmitEvent(eid) => {
                     scheduler.emit_event(eid);
                 }
-                _ => {}
+                spore_core::VmAction::StopTask(_) => {
+                    // No tasks running yet during initial execution
+                }
+                spore_core::VmAction::BindEvent {
+                    event_id,
+                    word_offset,
+                } => {
+                    // Bind to task 0 (first task added) if available,
+                    // otherwise the binding is dropped (no task context yet)
+                    if has_tasks {
+                        let _ = scheduler.bind_event(0, event_id, word_offset);
+                    }
+                }
             }
         }
 

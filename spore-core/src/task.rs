@@ -136,7 +136,7 @@ impl<P: Platform, const N: usize, const DS: usize, const RS: usize, const E: usi
     }
 
     /// Register an event binding for a specific task.
-    fn bind_event(
+    pub fn bind_event(
         &mut self,
         task_idx: usize,
         event_id: u16,
@@ -285,6 +285,7 @@ impl<P: Platform, const N: usize, const DS: usize, const RS: usize, const E: usi
             vm.times_sp = task.times_sp;
             vm.every_last = task.every_last;
             vm.every_sp = task.every_sp;
+            vm.halted = false; // Reset so this task can execute
             core::mem::swap(&mut vm.ds, &mut task.ds);
             core::mem::swap(&mut vm.rs, &mut task.rs);
 

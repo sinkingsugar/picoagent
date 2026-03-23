@@ -816,8 +816,14 @@ fn format_i32(v: i32, buf: &mut [u8; 12]) -> &str {
 fn format_f32(v: f32, buf: &mut [u8; 20]) -> &str {
     let negative = v < 0.0;
     let v = if negative { -v } else { v };
-    let integer_part = v as u32;
-    let frac_part = ((v - integer_part as f32) * 100.0 + 0.5) as u32;
+    let mut integer_part = v as u32;
+    let mut frac_part = ((v - integer_part as f32) * 100.0 + 0.5) as u32;
+
+    // Handle rounding carry (e.g., 1.995 → frac rounds to 100)
+    if frac_part >= 100 {
+        integer_part += 1;
+        frac_part = 0;
+    }
 
     let mut pos = buf.len();
 
