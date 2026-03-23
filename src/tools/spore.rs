@@ -720,6 +720,8 @@ impl DeploySporeTool {
                     // the last-added task is the best approximation.
                     if let Some(tidx) = last_task_idx {
                         let _ = scheduler.bind_event(tidx, event_id, word_offset);
+                    } else {
+                        log::warn!("[spore] BindEvent(ev={event_id}, word={word_offset}) dropped: no task started yet");
                     }
                 }
             }
@@ -799,19 +801,35 @@ impl Tool for DeploySporeTool {
     }
 
     fn description(&self) -> &'static str {
-        "Deploy and run a Spore program on the device. \
-         Returns stack contents, log output, and execution status. \
-         If available, see the Spore Language Reference in your system prompt for full syntax."
+        if crate::config::SPORE_PROMPT_ENABLED {
+            "Deploy and run a Spore program on the device. \
+             Returns stack contents, log output, and execution status. \
+             See the Spore Language Reference in your system prompt for full syntax."
+        } else {
+            "Deploy and run a Spore program on the device. Spore is a stack-based \
+             language (Forth-inspired) with uppercase tokens. Returns stack contents, \
+             log output, and execution status. Use LOG to print values, HEAP_FREE for \
+             memory, MILLIS for uptime. GPIO: GPIO_MODE (0=in,1=out,2=pullup,3=pulldown), \
+             GPIO_WRITE, GPIO_READ, GPIO_TOGGLE, ADC_READ. PWM: PWM_INIT (pin freq), \
+             PWM_DUTY (pin 0-1023). I2C: I2C_ADDR, I2C_WRITE, I2C_READ (SDA=8, SCL=9). \
+             Define words with DEF...END, tasks with TASK...ENDTASK."
+        }
     }
 
     fn parameters_schema(&self) -> Value {
+        let desc = if crate::config::SPORE_PROMPT_ENABLED {
+            "Spore program. Uppercase, space-delimited tokens. \
+                See Spore Language Reference in system prompt."
+        } else {
+            "Spore program. Uppercase, space-delimited tokens. \
+                Stack-based (Forth-like). Example: LIT 2 LIT 1 GPIO_MODE LIT 2 GPIO_TOGGLE"
+        };
         serde_json::json!({
             "type": "object",
             "properties": {
                 "program": {
                     "type": "string",
-                    "description": "Spore program. Uppercase, space-delimited tokens. \
-                        See Spore Language Reference in system prompt."
+                    "description": desc
                 }
             },
             "required": ["program"]
