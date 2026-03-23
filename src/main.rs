@@ -33,6 +33,7 @@ use storage::spiffs::SpiffsStorage;
 use telegram::polling::TelegramClient;
 use tools::examples::gpio::GpioTool;
 use tools::examples::info::InfoTool;
+use tools::examples::spore::{DeploySporeTool, SporeStatusStandalone};
 use tools::ToolRegistry;
 
 use esp_idf_svc::eventloop::EspSystemEventLoop;
@@ -83,12 +84,13 @@ fn run() -> anyhow::Result<()> {
     // Set up tools
     let mut tools = ToolRegistry::new();
 
-    let gpio_tool = GpioTool::new();
-    // Uncomment and adjust for your board:
-    // gpio_tool.add_output("led", peripherals.pins.gpio2.into())?;
-    // gpio_tool.add_output("relay1", peripherals.pins.gpio4.into())?;
-    tools.register(gpio_tool);
+    // Spore VM — the primary interface. Claude generates programs, device runs them.
+    tools.register(DeploySporeTool::new());
+    tools.register(SporeStatusStandalone::new());
 
+    // Legacy tools (kept for direct hardware access outside Spore)
+    let gpio_tool = GpioTool::new();
+    tools.register(gpio_tool);
     let info_tool = InfoTool::new();
     tools.register(info_tool);
 
