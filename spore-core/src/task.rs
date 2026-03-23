@@ -155,6 +155,8 @@ impl<P: Platform, const N: usize, const DS: usize, const RS: usize, const E: usi
     }
 
     /// Dispatch pending events: wake suspended tasks that have matching bindings.
+    /// Only wakes `Suspended` tasks — `Yielded` tasks are already scheduled for
+    /// the next round-robin pass and should not have their IP overwritten.
     fn dispatch_events(&mut self) -> Result<(), VmError> {
         for qi in 0..self.event_queue_len {
             let eid = self.event_queue[qi];
@@ -163,9 +165,7 @@ impl<P: Platform, const N: usize, const DS: usize, const RS: usize, const E: usi
                     if binding.event_id == eid {
                         let tidx = binding.task_idx;
                         if let Some(ref mut task) = self.tasks[tidx] {
-                            if task.state == TaskState::Suspended
-                                || task.state == TaskState::Yielded
-                            {
+                            if task.state == TaskState::Suspended {
                                 // Wake the task and set IP to the handler word
                                 task.rs.push(Value::I(task.ip as i32))?;
                                 task.ip = binding.word_offset as usize;
@@ -278,6 +278,7 @@ impl<P: Platform, const N: usize, const DS: usize, const RS: usize, const E: usi
             let saved_times_sp = vm.times_sp;
             let saved_every_last = vm.every_last;
             let saved_every_sp = vm.every_sp;
+            let saved_halted = vm.halted;
 
             vm.ip = task.ip;
             vm.vars = task.vars;
@@ -307,6 +308,7 @@ impl<P: Platform, const N: usize, const DS: usize, const RS: usize, const E: usi
             vm.times_sp = saved_times_sp;
             vm.every_last = saved_every_last;
             vm.every_sp = saved_every_sp;
+            vm.halted = saved_halted;
 
             match result {
                 StepResult::Continue | StepResult::Yielded => {

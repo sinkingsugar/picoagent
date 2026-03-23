@@ -31,7 +31,6 @@ use agent::session::{Session, SessionConfig};
 use llm::claude::ClaudeClient;
 use storage::spiffs::SpiffsStorage;
 use telegram::polling::TelegramClient;
-use tools::examples::gpio::GpioTool;
 use tools::examples::info::InfoTool;
 use tools::examples::spore::{DeploySporeTool, SporeStatusStandalone};
 use tools::ToolRegistry;
@@ -88,9 +87,7 @@ fn run() -> anyhow::Result<()> {
     tools.register(DeploySporeTool::new());
     tools.register(SporeStatusStandalone::new());
 
-    // Legacy tools (kept for direct hardware access outside Spore)
-    let gpio_tool = GpioTool::new();
-    tools.register(gpio_tool);
+    // InfoTool for device info (no hardware conflict with Spore)
     let info_tool = InfoTool::new();
     tools.register(info_tool);
 

@@ -56,7 +56,7 @@ pub struct Vm<
     pub times_stack: [u32; 8],
     pub times_sp: usize,
     /// EVERY state: last tick per nesting level. Per-task — scheduler
-    /// swaps these along with stacks.
+    /// saves/restores these along with stacks during context switches.
     pub every_last: [u32; 8],
     pub every_sp: usize,
     /// Pending actions for the scheduler to process.
@@ -410,7 +410,11 @@ impl<
             }
             Op::Break(loop_start) => {
                 // Read the end offset from the Loop opcode (resolved at parse time).
-                if let Op::Loop(end_off) = self.program[loop_start as usize] {
+                let idx = loop_start as usize;
+                if idx >= self.program_len {
+                    return Err(VmError::ParseError);
+                }
+                if let Op::Loop(end_off) = self.program[idx] {
                     self.ip = end_off as usize;
                 } else {
                     return Err(VmError::ParseError);

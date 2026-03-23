@@ -60,7 +60,7 @@ pub trait Platform {
     fn spi_init(&mut self, _clk: i32, _mosi: i32, _miso: i32, _cs: i32) -> PlatformResult<()> {
         Err(VmError::PlatformError)
     }
-    /// Full-duplex SPI transfer: read `in_buf`, write result to `out_buf`.
+    /// Full-duplex SPI transfer: send `in_buf` (MOSI), receive into `out_buf` (MISO).
     fn spi_transfer(&mut self, _in_buf: &[u8], _out_buf: &mut [u8]) -> PlatformResult<()> {
         Err(VmError::PlatformError)
     }
