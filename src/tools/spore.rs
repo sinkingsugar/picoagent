@@ -801,7 +801,7 @@ impl Tool for DeploySporeTool {
     fn description(&self) -> &'static str {
         "Deploy and run a Spore program on the device. \
          Returns stack contents, log output, and execution status. \
-         See the Spore Language Reference in your system prompt for full syntax."
+         If available, see the Spore Language Reference in your system prompt for full syntax."
     }
 
     fn parameters_schema(&self) -> Value {

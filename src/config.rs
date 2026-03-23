@@ -28,7 +28,7 @@ pub const MAX_RESPONSE_TOKENS: u32 = 2048;
 // Spore language reference in system prompt (set SPORE_PROMPT=0 to disable)
 pub const SPORE_PROMPT_ENABLED: bool = {
     match option_env!("SPORE_PROMPT") {
-        Some(v) => v.as_bytes()[0] != b'0',
+        Some(v) => !v.is_empty() && v.as_bytes()[0] != b'0',
         None => true,
     }
 };
