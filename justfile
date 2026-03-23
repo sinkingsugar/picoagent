@@ -107,6 +107,10 @@ clippy:
 check:
     cargo check --release
 
+# Check example tools compile (prevents bitrot)
+check-examples:
+    cargo check --release --features examples
+
 # ============================================================================
 # Clean
 # ============================================================================

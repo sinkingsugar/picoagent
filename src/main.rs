@@ -31,8 +31,8 @@ use agent::session::{Session, SessionConfig};
 use llm::claude::ClaudeClient;
 use storage::spiffs::SpiffsStorage;
 use telegram::polling::TelegramClient;
-use tools::examples::info::InfoTool;
-use tools::examples::spore::{DeploySporeTool, SporeStatusStandalone};
+use tools::info::InfoTool;
+use tools::spore::{DeploySporeTool, SporeStatusStandalone};
 use tools::ToolRegistry;
 
 use esp_idf_svc::eventloop::EspSystemEventLoop;

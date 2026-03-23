@@ -26,23 +26,144 @@ pub struct SessionConfig {
 
 impl Default for SessionConfig {
     fn default() -> Self {
+        let mut prompt = format!(
+            "You are an AI assistant running on an ESP32-S3 microcontroller ({}). \
+             You control hardware and respond to the user via Telegram.\n\n\
+             You have access to tools that interact with the physical world. \
+             Use them when the user asks you to do something with hardware, \
+             check sensors, or manage the system.\n\n\
+             Be concise — your responses go through Telegram. \
+             Prefer short, actionable answers.",
+            crate::config::DEVICE_LABEL
+        );
+
+        if crate::config::SPORE_PROMPT_ENABLED {
+            prompt.push_str("\n\n");
+            prompt.push_str(SPORE_REFERENCE);
+        }
+
+        prompt.push_str("\n\n{summary}");
+
         Self {
             max_messages: 40,
             max_content_bytes: 32_768,
-            system_prompt: format!(
-                "You are an AI assistant running on an ESP32-S3 microcontroller ({}). \
-                 You control hardware and respond to the user via Telegram.\n\n\
-                 You have access to tools that interact with the physical world. \
-                 Use them when the user asks you to do something with hardware, \
-                 check sensors, or manage the system.\n\n\
-                 Be concise — your responses go through Telegram. \
-                 Prefer short, actionable answers.\n\n\
-                 {{summary}}",
-                crate::config::DEVICE_LABEL
-            ),
+            system_prompt: prompt,
         }
     }
 }
+
+/// Spore language reference for the LLM system prompt.
+///
+/// Designed to be token-efficient while giving the LLM everything it needs
+/// to generate correct Spore programs. Disable via SPORE_PROMPT=0 in .env.
+const SPORE_REFERENCE: &str = "\
+# Spore Language Reference
+
+Spore is a stack-based language (Forth-inspired) you use via the deploy_spore tool. \
+All tokens are UPPERCASE and space-delimited. Values are pushed onto a stack; \
+operations pop their arguments and push results.
+
+## Types
+- Int: LIT <n> (decimal or 0x hex). 32-bit signed.
+- Float: FLIT <n> (e.g. FLIT 3.14). 32-bit.
+- Bool: TRUE / FALSE
+- String: STR \"text\" — pushes a string reference.
+
+## Stack ( before -- after )
+DUP (a -- a a) | DROP (a -- ) | SWAP (a b -- b a) | OVER (a b -- a b a)
+ROT (a b c -- b c a) | NIP (a b -- b) | TUCK (a b -- b a b)
+2DUP (a b -- a b a b) | 2DROP (a b -- ) | DEPTH ( -- n)
+
+## Arithmetic (operands -- result)
+ADD SUB MUL DIV MOD — pop two, push result. Float auto-promotes.
+ABS NEG — pop one, push result.
+MIN MAX — pop two, push lesser/greater.
+
+## Comparison (a b -- bool)
+EQ NEQ GT LT GTE LTE — push TRUE/FALSE.
+
+## Logic
+AND OR — bitwise on ints, logical on bools. NOT XOR SHL SHR — integer ops.
+
+## Type Conversion
+I>F F>I I>STR F>STR — pop one type, push converted.
+
+## Control Flow
+IF <true-body> THEN — pops bool, skips body if false.
+IF <true-body> ELSE <false-body> THEN — branches.
+LOOP <body> ENDLOOP — infinite loop.
+BREAK — exit enclosing LOOP.
+LIT <n> TIMES <body> ENDTIMES — repeat n times.
+BEGIN <body> <condition> UNTIL — loop until condition is true.
+
+## Variables
+VAR <name> — declare (before use). STORE <name> — pop and save. FETCH <name> — push value.
+
+## Words (Functions)
+DEF <name> <body> END — define a reusable word. Call by name.
+
+## Tasks & Scheduling
+TASK <name> <body> ENDTASK — define a task. A task named 'main' auto-starts.
+START <name> / STOP <name> — start/stop tasks.
+YIELD — cooperatively yield to scheduler. YIELD_FOREVER — suspend until event.
+EVERY <ms> <body> ENDEVERY — run body at interval (inside a task with YIELD loop).
+
+## Events
+DEF handler <body> END — define handler word first.
+ON <event> <handler> — bind event to word. EMIT <event> — fire event.
+
+## GPIO (pin -- )
+LIT <pin> LIT <mode> GPIO_MODE — set pin mode (0=input, 1=output, 2=input_pullup, 3=input_pulldown).
+LIT <pin> LIT <val> GPIO_WRITE — write 0/1.
+LIT <pin> GPIO_READ — (pin -- value) read pin.
+LIT <pin> GPIO_TOGGLE — toggle output.
+LIT <pin> ADC_READ — (pin -- raw_value) read ADC.
+
+## PWM
+LIT <pin> LIT <freq_hz> PWM_INIT — initialize PWM on pin.
+LIT <pin> LIT <duty> PWM_DUTY — set duty 0-1023.
+
+## I2C (SDA=8, SCL=9 on this board)
+LIT <addr> I2C_ADDR — set slave address (7-bit).
+LIT <byte> I2C_WRITE — write one byte.
+I2C_READ — ( -- byte) read one byte.
+<buf> I2C_WRITE_BUF — write buffer.
+LIT <len> I2C_READ_BUF — ( -- buf) read into new buffer.
+LIT <addr> I2C_ADDR BME_READ — ( -- temp hum pressure) read BME280 sensor (floats).
+
+## SPI
+LIT <clk> LIT <mosi> LIT <miso> LIT <cs> SPI_INIT
+<buf_in> SPI_TRANSFER — ( -- buf_out)
+
+## WiFi
+STR \"ssid\" STR \"pass\" WIFI_CONNECT | WIFI_STATUS ( -- int) | WIFI_DISCONNECT | WIFI_IP ( -- int)
+
+## BLE
+BLE_INIT | STR \"name\" BLE_ADVERTISE | BLE_STOP_ADV
+LIT <handle> STR \"data\" BLE_NOTIFY | LIT <handle> BLE_READ ( -- buf)
+
+## MQTT
+STR \"broker\" LIT <port> MQTT_INIT
+STR \"topic\" STR \"payload\" MQTT_PUB
+STR \"topic\" MQTT_SUB | STR \"topic\" MQTT_UNSUB
+
+## System
+LIT <ms> DELAY_MS | MILLIS ( -- ms) | LIT <secs> DEEP_SLEEP | REBOOT
+STR \"key\" NVS_GET ( -- int) | STR \"key\" LIT <val> NVS_SET
+HEAP_FREE ( -- bytes) | STR \"msg\" LOG — print to device log.
+
+## Comments
+\\ backslash starts a comment to end of line.
+
+## Examples
+Blink LED on pin 2:
+TASK main LIT 2 LIT 1 GPIO_MODE LOOP LIT 2 GPIO_TOGGLE LIT 500 DELAY_MS ENDLOOP ENDTASK
+
+Read temperature and log:
+LIT 0x76 I2C_ADDR BME_READ F>STR LOG DROP DROP
+
+Conditional with variable:
+VAR count LIT 0 STORE count LIT 10 TIMES FETCH count LIT 1 ADD STORE count ENDTIMES FETCH count I>STR LOG";
 
 /// A conversation session with compaction support.
 pub struct Session {

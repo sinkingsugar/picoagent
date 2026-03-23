@@ -26,6 +26,10 @@ strip = true
 debug = true
 opt-level = "z"
 
+[features]
+default = []
+examples = []  # compile example tools (gpio) — off in firmware builds
+
 [dependencies]
 log = "0.4"
 esp-idf-svc = { version = "0.51", features = ["experimental"] }

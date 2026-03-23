@@ -768,13 +768,9 @@ impl Tool for DeploySporeTool {
     }
 
     fn description(&self) -> &'static str {
-        "Deploy and run a Spore program on the device. Spore is a stack-based \
-         language (Forth-inspired) with uppercase tokens. Returns stack contents, \
-         log output, and execution status. Use LOG to print values, HEAP_FREE for \
-         memory, MILLIS for uptime. GPIO: GPIO_MODE (0=in,1=out,2=pullup,3=pulldown), \
-         GPIO_WRITE, GPIO_READ, GPIO_TOGGLE, ADC_READ. PWM: PWM_INIT (pin freq), \
-         PWM_DUTY (pin 0-1023). I2C: I2C_ADDR, I2C_WRITE, I2C_READ (SDA=8, SCL=9). \
-         Define words with DEF...END, tasks with TASK...ENDTASK."
+        "Deploy and run a Spore program on the device. \
+         Returns stack contents, log output, and execution status. \
+         See the Spore Language Reference in your system prompt for full syntax."
     }
 
     fn parameters_schema(&self) -> Value {
@@ -783,11 +779,8 @@ impl Tool for DeploySporeTool {
             "properties": {
                 "program": {
                     "type": "string",
-                    "description": "Spore token stream. Uppercase, space-delimited. \
-                        Example: 'LIT 2 LIT 3 ADD' pushes 5. \
-                        'HEAP_FREE' pushes free bytes. \
-                        'STR \"hello\" LOG' logs a message. \
-                        'LIT 12 LIT 25000 PWM_INIT LIT 12 LIT 512 PWM_DUTY' starts PWM."
+                    "description": "Spore program. Uppercase, space-delimited tokens. \
+                        See Spore Language Reference in system prompt."
                 }
             },
             "required": ["program"]
