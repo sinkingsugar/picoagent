@@ -1,0 +1,8 @@
+[package]
+name = "spore-core"
+version = "0.1.0"
+edition = "2021"
+description = "Spore — tiny stack-based VM for AI-generated embedded programs"
+license = "MIT"
+
+[dependencies]
