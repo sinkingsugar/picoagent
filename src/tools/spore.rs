@@ -160,7 +160,11 @@ impl Esp32Platform {
     }
 
     /// Find or allocate a LEDC channel for a pin.
-    fn find_or_alloc_pwm_channel(&mut self, pin: i32, timer: sys::ledc_timer_t) -> Option<sys::ledc_channel_t> {
+    fn find_or_alloc_pwm_channel(
+        &mut self,
+        pin: i32,
+        timer: sys::ledc_timer_t,
+    ) -> Option<sys::ledc_channel_t> {
         // Check if pin already has a channel
         for ch in &mut self.pwm_channels {
             if let Some(c) = ch {
@@ -175,7 +179,11 @@ impl Esp32Platform {
             return None;
         }
         let channel = self.pwm_count as sys::ledc_channel_t;
-        self.pwm_channels[self.pwm_count] = Some(PwmChannel { pin, channel, timer });
+        self.pwm_channels[self.pwm_count] = Some(PwmChannel {
+            pin,
+            channel,
+            timer,
+        });
         self.pwm_count += 1;
         Some(channel)
     }
@@ -185,13 +193,21 @@ impl Esp32Platform {
         let reg_buf = [reg];
         let ret = unsafe {
             sys::i2c_master_write_to_device(
-                I2C_PORT, self.i2c_addr, reg_buf.as_ptr(), 1, I2C_TIMEOUT_TICKS,
+                I2C_PORT,
+                self.i2c_addr,
+                reg_buf.as_ptr(),
+                1,
+                I2C_TIMEOUT_TICKS,
             )
         };
         esp_ok(ret)?;
         let ret = unsafe {
             sys::i2c_master_read_from_device(
-                I2C_PORT, self.i2c_addr, buf.as_mut_ptr(), buf.len(), I2C_TIMEOUT_TICKS,
+                I2C_PORT,
+                self.i2c_addr,
+                buf.as_mut_ptr(),
+                buf.len(),
+                I2C_TIMEOUT_TICKS,
             )
         };
         esp_ok(ret)
@@ -273,16 +289,18 @@ impl Esp32Platform {
             return Err(VmError::PlatformError);
         }
 
-        let ret = unsafe {
-            sys::i2c_driver_install(I2C_PORT, sys::i2c_mode_t_I2C_MODE_MASTER, 0, 0, 0)
-        };
+        let ret =
+            unsafe { sys::i2c_driver_install(I2C_PORT, sys::i2c_mode_t_I2C_MODE_MASTER, 0, 0, 0) };
         if ret != sys::ESP_OK {
             warn!("[spore] i2c_driver_install failed: {}", ret);
             return Err(VmError::PlatformError);
         }
 
         self.i2c_initialized = true;
-        info!("[spore] I2C initialized on SDA={} SCL={}", I2C_SDA_PIN, I2C_SCL_PIN);
+        info!(
+            "[spore] I2C initialized on SDA={} SCL={}",
+            I2C_SDA_PIN, I2C_SCL_PIN
+        );
         Ok(())
     }
 }
@@ -332,10 +350,10 @@ impl Platform for Esp32Platform {
             esp_ok(sys::gpio_reset_pin(pin))?;
         }
         let direction = match mode {
-            0 => sys::gpio_mode_t_GPIO_MODE_INPUT,               // input
-            1 => sys::gpio_mode_t_GPIO_MODE_OUTPUT,              // output
-            2 => sys::gpio_mode_t_GPIO_MODE_INPUT,               // input + pullup
-            3 => sys::gpio_mode_t_GPIO_MODE_INPUT,               // input + pulldown
+            0 => sys::gpio_mode_t_GPIO_MODE_INPUT,  // input
+            1 => sys::gpio_mode_t_GPIO_MODE_OUTPUT, // output
+            2 => sys::gpio_mode_t_GPIO_MODE_INPUT,  // input + pullup
+            3 => sys::gpio_mode_t_GPIO_MODE_INPUT,  // input + pulldown
             _ => return Err(VmError::PlatformError),
         };
         unsafe {
@@ -343,8 +361,18 @@ impl Platform for Esp32Platform {
         }
         // Set pull resistor
         match mode {
-            2 => unsafe { esp_ok(sys::gpio_set_pull_mode(pin, sys::gpio_pull_mode_t_GPIO_PULLUP_ONLY))? },
-            3 => unsafe { esp_ok(sys::gpio_set_pull_mode(pin, sys::gpio_pull_mode_t_GPIO_PULLDOWN_ONLY))? },
+            2 => unsafe {
+                esp_ok(sys::gpio_set_pull_mode(
+                    pin,
+                    sys::gpio_pull_mode_t_GPIO_PULLUP_ONLY,
+                ))?
+            },
+            3 => unsafe {
+                esp_ok(sys::gpio_set_pull_mode(
+                    pin,
+                    sys::gpio_pull_mode_t_GPIO_PULLDOWN_ONLY,
+                ))?
+            },
             _ => {}
         }
         Ok(())
@@ -406,7 +434,10 @@ impl Platform for Esp32Platform {
             esp_ok(sys::ledc_channel_config(&channel_conf))?;
         }
 
-        info!("[spore] PWM init: pin={} freq={}Hz channel={} timer={}", pin, freq, channel, timer_num);
+        info!(
+            "[spore] PWM init: pin={} freq={}Hz channel={} timer={}",
+            pin, freq, channel, timer_num
+        );
         Ok(())
     }
 
@@ -415,11 +446,7 @@ impl Platform for Esp32Platform {
         let channel = self
             .pwm_channels
             .iter()
-            .find_map(|ch| {
-                ch.as_ref()
-                    .filter(|c| c.pin == pin)
-                    .map(|c| c.channel)
-            })
+            .find_map(|ch| ch.as_ref().filter(|c| c.pin == pin).map(|c| c.channel))
             .ok_or(VmError::PlatformError)?;
 
         let duty_clamped = duty.clamp(0, 1023) as u32;
@@ -451,10 +478,7 @@ impl Platform for Esp32Platform {
         unsafe {
             // Configure width and attenuation on first read
             let _ = sys::adc1_config_width(sys::adc_bits_width_t_ADC_WIDTH_BIT_12);
-            let _ = sys::adc1_config_channel_atten(
-                channel,
-                sys::adc_atten_t_ADC_ATTEN_DB_12,
-            );
+            let _ = sys::adc1_config_channel_atten(channel, sys::adc_atten_t_ADC_ATTEN_DB_12);
             let raw = sys::adc1_get_raw(channel);
             if raw < 0 {
                 return Err(VmError::PlatformError);
@@ -543,7 +567,8 @@ impl Platform for Esp32Platform {
         self.i2c_read_regs(0xF7, &mut data)?;
 
         // Raw values (20-bit pressure/temp, 16-bit humidity)
-        let raw_press = ((data[0] as i32) << 12) | ((data[1] as i32) << 4) | ((data[2] as i32) >> 4);
+        let raw_press =
+            ((data[0] as i32) << 12) | ((data[1] as i32) << 4) | ((data[2] as i32) >> 4);
         let raw_temp = ((data[3] as i32) << 12) | ((data[4] as i32) << 4) | ((data[5] as i32) >> 4);
         let raw_hum = ((data[6] as i32) << 8) | (data[7] as i32);
 
@@ -561,7 +586,8 @@ impl Platform for Esp32Platform {
         let mut pvar2 = pvar1 * pvar1 * cal.dig_p6 as f32 / 32768.0;
         pvar2 += pvar1 * cal.dig_p5 as f32 * 2.0;
         pvar2 = pvar2 / 4.0 + cal.dig_p4 as f32 * 65536.0;
-        pvar1 = (cal.dig_p3 as f32 * pvar1 * pvar1 / 524288.0 + cal.dig_p2 as f32 * pvar1) / 524288.0;
+        pvar1 =
+            (cal.dig_p3 as f32 * pvar1 * pvar1 / 524288.0 + cal.dig_p2 as f32 * pvar1) / 524288.0;
         pvar1 = (1.0 + pvar1 / 32768.0) * cal.dig_p1 as f32;
         let press = if pvar1 > 0.0 {
             let mut p = 1048576.0 - raw_press as f32;
@@ -580,10 +606,18 @@ impl Platform for Esp32Platform {
         }
         h = (raw_hum as f32 - (cal.dig_h4 as f32 * 64.0 + cal.dig_h5 as f32 / 16384.0 * h))
             * (cal.dig_h2 as f32 / 65536.0
-                * (1.0 + cal.dig_h6 as f32 / 67108864.0 * h
-                    * (1.0 + cal.dig_h3 as f32 / 67108864.0 * h)));
+                * (1.0
+                    + cal.dig_h6 as f32 / 67108864.0
+                        * h
+                        * (1.0 + cal.dig_h3 as f32 / 67108864.0 * h)));
         h *= 1.0 - cal.dig_h1 as f32 * h / 524288.0;
-        let hum = if h > 100.0 { 100.0 } else if h < 0.0 { 0.0 } else { h };
+        let hum = if h > 100.0 {
+            100.0
+        } else if h < 0.0 {
+            0.0
+        } else {
+            h
+        };
 
         Ok((temp, hum, press))
     }
@@ -686,6 +720,8 @@ impl DeploySporeTool {
                     // the last-added task is the best approximation.
                     if let Some(tidx) = last_task_idx {
                         let _ = scheduler.bind_event(tidx, event_id, word_offset);
+                    } else {
+                        log::warn!("[spore] BindEvent(ev={event_id}, word={word_offset}) dropped: no task started yet");
                     }
                 }
             }
@@ -751,10 +787,7 @@ impl DeploySporeTool {
                 output.push_str("STATUS: suspended (waiting for event)\n");
             }
             spore_core::StepResult::Error(e) => {
-                return Ok(ToolOutput::err(format!(
-                    "{}Runtime error: {:?}",
-                    output, e
-                )));
+                return Ok(ToolOutput::err(format!("{}Runtime error: {:?}", output, e)));
             }
         }
 
@@ -768,26 +801,35 @@ impl Tool for DeploySporeTool {
     }
 
     fn description(&self) -> &'static str {
-        "Deploy and run a Spore program on the device. Spore is a stack-based \
-         language (Forth-inspired) with uppercase tokens. Returns stack contents, \
-         log output, and execution status. Use LOG to print values, HEAP_FREE for \
-         memory, MILLIS for uptime. GPIO: GPIO_MODE (0=in,1=out,2=pullup,3=pulldown), \
-         GPIO_WRITE, GPIO_READ, GPIO_TOGGLE, ADC_READ. PWM: PWM_INIT (pin freq), \
-         PWM_DUTY (pin 0-1023). I2C: I2C_ADDR, I2C_WRITE, I2C_READ (SDA=8, SCL=9). \
-         Define words with DEF...END, tasks with TASK...ENDTASK."
+        if crate::config::SPORE_PROMPT_ENABLED {
+            "Deploy and run a Spore program on the device. \
+             Returns stack contents, log output, and execution status. \
+             See the Spore Language Reference in your system prompt for full syntax."
+        } else {
+            "Deploy and run a Spore program on the device. Spore is a stack-based \
+             language (Forth-inspired) with uppercase tokens. Returns stack contents, \
+             log output, and execution status. Use LOG to print values, HEAP_FREE for \
+             memory, MILLIS for uptime. GPIO: GPIO_MODE (0=in,1=out,2=pullup,3=pulldown), \
+             GPIO_WRITE, GPIO_READ, GPIO_TOGGLE, ADC_READ. PWM: PWM_INIT (pin freq), \
+             PWM_DUTY (pin 0-1023). I2C: I2C_ADDR, I2C_WRITE, I2C_READ (SDA=8, SCL=9). \
+             Define words with DEF...END, tasks with TASK...ENDTASK."
+        }
     }
 
     fn parameters_schema(&self) -> Value {
+        let desc = if crate::config::SPORE_PROMPT_ENABLED {
+            "Spore program. Uppercase, space-delimited tokens. \
+                See Spore Language Reference in system prompt."
+        } else {
+            "Spore program. Uppercase, space-delimited tokens. \
+                Stack-based (Forth-like). Example: LIT 2 LIT 1 GPIO_MODE LIT 2 GPIO_TOGGLE"
+        };
         serde_json::json!({
             "type": "object",
             "properties": {
                 "program": {
                     "type": "string",
-                    "description": "Spore token stream. Uppercase, space-delimited. \
-                        Example: 'LIT 2 LIT 3 ADD' pushes 5. \
-                        'HEAP_FREE' pushes free bytes. \
-                        'STR \"hello\" LOG' logs a message. \
-                        'LIT 12 LIT 25000 PWM_INIT LIT 12 LIT 512 PWM_DUTY' starts PWM."
+                    "description": desc
                 }
             },
             "required": ["program"]
@@ -879,7 +921,11 @@ const fn const_parse_i32(s: &str) -> i32 {
         result = result * 10 + (bytes[i] - b'0') as i32;
         i += 1;
     }
-    if negative { -result } else { result }
+    if negative {
+        -result
+    } else {
+        result
+    }
 }
 
 fn format_value(val: spore_core::Value, strings: &spore_core::StringPool<2048, 128>) -> String {

@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  # Dummy values so env!() macros compile — firmware is never flashed in CI
+  WIFI_SSID: "ci"
+  WIFI_PASS: "ci"
+  TELEGRAM_BOT_TOKEN: "ci"
+  TELEGRAM_CHAT_ID: "0"
+  CLAUDE_API_KEY: "ci"
+
+jobs:
+  # Fast: spore-core tests on host (no ESP toolchain needed)
+  spore-tests:
+    name: spore-core tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: spore-core
+      # Override rust-toolchain.toml which forces the esp channel
+      - run: cd spore-core && cargo +stable test --target x86_64-unknown-linux-gnu
+
+  # Full firmware build with Xtensa toolchain
+  firmware:
+    name: firmware build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: esp-rs/xtensa-toolchain@v1.5
+        with:
+          default: true
+          ldproxy: true
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-directories: .embuild
+      # First build may fail needing partitions.csv in OUT_DIR — mirror justfile logic
+      - name: Build firmware
+        run: |
+          if ! cargo check --release 2>&1; then
+            OUT_DIR=$(find target -path "*/esp-idf-sys-*/out" -type d 2>/dev/null | head -1)
+            if [ -n "$OUT_DIR" ]; then
+              cp partitions.csv "$OUT_DIR/"
+              cargo check --release
+            else
+              echo "Build failed and couldn't find OUT_DIR"
+              exit 1
+            fi
+          fi
+      - run: cargo check --release --features examples
+
+  # Format check
+  fmt:
+    name: format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: esp-rs/xtensa-toolchain@v1.5
+        with:
+          default: true
+          ldproxy: true
+      - run: cargo fmt -- --check

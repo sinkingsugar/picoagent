@@ -58,7 +58,7 @@ User ↔ Telegram (long poll) ↔ Agent Loop ↔ Claude API
 
 ## Extending
 
-1. Create a new file in `src/tools/examples/` (or anywhere)
+1. Create a new file in `src/tools/` (or `src/tools/examples/` for optional tools behind the `examples` feature flag)
 2. Implement the `Tool` trait:
    ```rust
    impl Tool for MyTool {

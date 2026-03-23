@@ -3,7 +3,10 @@
 //! Implement [`Tool`] to teach the agent new capabilities.
 //! Register tools with [`ToolRegistry`] at boot.
 
+#[cfg(feature = "examples")]
 pub mod examples;
+pub mod info;
+pub mod spore;
 
 use anyhow::Result;
 use serde_json::Value;

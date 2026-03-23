@@ -148,10 +148,7 @@ impl TelegramClient {
             // If markdown parsing fails, Telegram returns 400 — retry plain
             if status == 400 {
                 debug!("Send failed ({}), retrying without formatting", status);
-                let payload_plain = format!(
-                    r#"{{"chat_id":{},"text":"{}"}}"#,
-                    chat_id, escaped
-                );
+                let payload_plain = format!(r#"{{"chat_id":{},"text":"{}"}}"#, chat_id, escaped);
                 let (status2, _) = http::post_json(&url, &payload_plain, &[], SEND_TIMEOUT_SECS)?;
                 if !(200..300).contains(&status2) {
                     bail!("Telegram send failed with status {status2}");

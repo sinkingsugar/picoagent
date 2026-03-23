@@ -34,7 +34,13 @@ impl Value {
         match self {
             Value::F(v) => v,
             Value::I(v) => v as f32,
-            Value::B(v) => if v { 1.0 } else { 0.0 },
+            Value::B(v) => {
+                if v {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
             _ => 0.0,
         }
     }

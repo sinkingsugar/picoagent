@@ -26,8 +26,8 @@ impl SpiffsStorage {
     pub fn mount() -> Result<Self> {
         let mount_path =
             CString::new(MOUNT_POINT).map_err(|_| anyhow::anyhow!("invalid mount path"))?;
-        let partition_label =
-            CString::new(PARTITION_LABEL).map_err(|_| anyhow::anyhow!("invalid partition label"))?;
+        let partition_label = CString::new(PARTITION_LABEL)
+            .map_err(|_| anyhow::anyhow!("invalid partition label"))?;
 
         let conf = sys::esp_vfs_spiffs_conf_t {
             base_path: mount_path.as_ptr(),
@@ -44,9 +44,8 @@ impl SpiffsStorage {
         // Log partition info
         let mut total: usize = 0;
         let mut used: usize = 0;
-        let info_ret = unsafe {
-            sys::esp_spiffs_info(partition_label.as_ptr(), &mut total, &mut used)
-        };
+        let info_ret =
+            unsafe { sys::esp_spiffs_info(partition_label.as_ptr(), &mut total, &mut used) };
         if info_ret == 0 {
             info!(
                 "SPIFFS mounted at {MOUNT_POINT}: {} KB total, {} KB used",
@@ -82,15 +81,13 @@ impl Drop for SpiffsStorage {
 impl Storage for SpiffsStorage {
     fn read(&self, key: &str) -> Result<String> {
         let path = Self::full_path(key)?;
-        fs::read_to_string(&path)
-            .with_context(|| format!("failed to read {path}"))
+        fs::read_to_string(&path).with_context(|| format!("failed to read {path}"))
     }
 
     fn write(&self, key: &str, value: &str) -> Result<()> {
         let path = Self::full_path(key)?;
         debug!("Writing {} bytes to {}", value.len(), path);
-        fs::write(&path, value)
-            .with_context(|| format!("failed to write {path}"))
+        fs::write(&path, value).with_context(|| format!("failed to write {path}"))
     }
 
     fn delete(&self, key: &str) -> Result<()> {

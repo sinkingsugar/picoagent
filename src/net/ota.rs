@@ -13,8 +13,10 @@ use log::info;
 /// 1. Switch partitions.csv to dual OTA layout
 /// 2. Uncomment the implementation below
 pub fn update_from_url(_url: &str) -> Result<usize> {
-    bail!("OTA not enabled — partition table uses factory layout. \
-           Switch to OTA partitions first.")
+    bail!(
+        "OTA not enabled — partition table uses factory layout. \
+           Switch to OTA partitions first."
+    )
 }
 
 /// Reboot the device.

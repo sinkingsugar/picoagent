@@ -142,10 +142,8 @@ impl LlmProvider for ClaudeClient {
         debug!("Claude request: {} bytes", body.len());
 
         let auth_headers = self.build_auth_headers();
-        let extra_headers: Vec<(&str, &str)> = auth_headers
-            .iter()
-            .map(|(k, v)| (*k, v.as_str()))
-            .collect();
+        let extra_headers: Vec<(&str, &str)> =
+            auth_headers.iter().map(|(k, v)| (*k, v.as_str())).collect();
 
         let (status, response_str) =
             http::post_json(ANTHROPIC_API_URL, &body, &extra_headers, LLM_TIMEOUT_SECS)?;

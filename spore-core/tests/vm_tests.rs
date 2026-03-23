@@ -239,11 +239,11 @@ fn test_if_false() {
 fn test_if_else() {
     let vm = run_ops(&[
         Op::BLit(false),
-        Op::If(4),      // false → jump to 4
+        Op::If(4), // false → jump to 4
         Op::Lit(42),
-        Op::Else(5),    // jump to 5 (Then)
-        Op::Lit(99),    // index 4: else branch
-        Op::Then,       // index 5
+        Op::Else(5), // jump to 5 (Then)
+        Op::Lit(99), // index 4: else branch
+        Op::Then,    // index 5
         Op::Halt,
     ]);
     assert_eq!(vm.ds.peek().unwrap().as_int(), 99);
@@ -252,9 +252,9 @@ fn test_if_else() {
 #[test]
 fn test_times_loop() {
     let vm = run_ops(&[
-        Op::Lit(0),      // accumulator
-        Op::Lit(5),      // count
-        Op::Times(6),    // pop 5, loop body at 3..5
+        Op::Lit(0),   // accumulator
+        Op::Lit(5),   // count
+        Op::Times(6), // pop 5, loop body at 3..5
         Op::Lit(1),
         Op::Add,
         Op::EndTimes(3), // decrement, if >0 jump to 3
@@ -266,14 +266,14 @@ fn test_times_loop() {
 #[test]
 fn test_begin_until() {
     let vm = run_ops(&[
-        Op::Lit(0),       // counter
-        Op::Begin,        // index 1
+        Op::Lit(0), // counter
+        Op::Begin,  // index 1
         Op::Lit(1),
         Op::Add,
         Op::Dup,
         Op::Lit(5),
         Op::Eq,
-        Op::Until(1),     // if false, jump back to Begin at index 1
+        Op::Until(1), // if false, jump back to Begin at index 1
         Op::Halt,
     ]);
     assert_eq!(vm.ds.peek().unwrap().as_int(), 5);
@@ -285,17 +285,17 @@ fn test_loop_break() {
     // Loop stores offset to AFTER EndLoop (for Break to use)
     // EndLoop stores offset to Loop itself (to re-enter)
     let vm = run_ops(&[
-        Op::Lit(0),        // 0: counter
-        Op::Loop(10),      // 1: loop start; Break exit → 10
-        Op::Lit(1),        // 2
-        Op::Add,           // 3
-        Op::Dup,           // 4
-        Op::Lit(3),        // 5
-        Op::Eq,            // 6
-        Op::If(9),         // 7: if false → jump to 9 (EndLoop); true → fall through
-        Op::Break(1),      // 8: exit loop → reads Loop(10) at index 1, jumps to 10
-        Op::EndLoop(1),    // 9: jump back to Loop at 1
-        Op::Halt,          // 10
+        Op::Lit(0),     // 0: counter
+        Op::Loop(10),   // 1: loop start; Break exit → 10
+        Op::Lit(1),     // 2
+        Op::Add,        // 3
+        Op::Dup,        // 4
+        Op::Lit(3),     // 5
+        Op::Eq,         // 6
+        Op::If(9),      // 7: if false → jump to 9 (EndLoop); true → fall through
+        Op::Break(1),   // 8: exit loop → reads Loop(10) at index 1, jumps to 10
+        Op::EndLoop(1), // 9: jump back to Loop at 1
+        Op::Halt,       // 10
     ]);
     assert_eq!(vm.ds.peek().unwrap().as_int(), 3);
 }
@@ -323,12 +323,12 @@ fn test_variables() {
 fn test_call_return() {
     let mut vm = Vm::<NullPlatform>::new(NullPlatform);
     vm.load(&[
-        Op::Dup,       // 0: double body
-        Op::Add,       // 1
-        Op::Return,    // 2
-        Op::Lit(21),   // 3: main
-        Op::Call(0),   // 4
-        Op::Halt,      // 5
+        Op::Dup,     // 0: double body
+        Op::Add,     // 1
+        Op::Return,  // 2
+        Op::Lit(21), // 3: main
+        Op::Call(0), // 4
+        Op::Halt,    // 5
     ]);
     vm.ip = 3;
     vm.run();
@@ -684,10 +684,7 @@ fn test_scheduler_event_wakeup() {
 
     // First tick: task runs On + YieldForever → Suspended
     sched.tick(&mut vm, &dict, 100).unwrap();
-    assert_eq!(
-        sched.tasks[0].as_ref().unwrap().state,
-        TaskState::Suspended
-    );
+    assert_eq!(sched.tasks[0].as_ref().unwrap().state, TaskState::Suspended);
 
     // Process the BindEvent action manually (tick already did it)
     // Now emit the event
@@ -748,7 +745,11 @@ fn test_parse_cactus_monitor() {
     "#;
 
     let result = parse(input, &mut strings, &mut dict);
-    assert!(result.is_ok(), "Cactus monitor should parse: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Cactus monitor should parse: {:?}",
+        result.err()
+    );
 
     let result = result.unwrap();
     assert!(result.entry.is_some(), "main entry should be found");
