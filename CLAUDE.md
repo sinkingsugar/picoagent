@@ -4,6 +4,10 @@
 
 An AI-OS for ESP32-S3 microcontrollers. Telegram bot → Claude API → tool execution on hardware. Single-threaded, synchronous, blocking — no async runtime. Written in Rust targeting `xtensa-esp32s3-espidf` via esp-rs (std, not no_std).
 
+This is a Cargo workspace with two members:
+- **picoagent** (`.`) — the main agent runtime
+- **spore-core** (`spore-core/`) — Spore, a tiny stack-based VM for AI-generated embedded programs (see `spore-core/CLAUDE.md`)
+
 ## Hardware
 
 - **Board:** Freenove ESP32-S3 WROOM Lite (8MB flash)

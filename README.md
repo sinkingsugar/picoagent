@@ -123,6 +123,29 @@ just clean          # Clean build artifacts
 - **SPIFFS persistence.** Session survives reboots. ~5MB storage partition on flash.
 - **Dual Claude auth.** Standard API keys and OAuth tokens (Claude Code compatible). Auto-detected from the key prefix.
 
+## Spore — Embedded VM
+
+picoagent includes **spore-core**, a tiny stack-based VM for AI-generated embedded programs. Claude generates Spore token streams that run directly on the ESP32 — cooperative multitasking, GPIO/I2C/SPI/BLE/MQTT, event-driven tasks, all in `#![no_std]` with zero allocations.
+
+```
+DEF read_sensor
+  LIT 0x76 I2C_ADDR BME_READ
+END
+
+TASK monitor
+  EVERY 30000
+    read_sensor
+    DUP FLIT 35.0 GT IF
+      STR "alert/temp" SWAP F>STR MQTT_PUB
+    THEN
+  ENDEVERY
+ENDTASK
+```
+
+A spore is a program — a self-contained capsule of instructions that lands on a microcontroller and starts doing things. The name fits: biological, microscopic, produced and dispersed by AI rather than hand-crafted.
+
+See `spore-core/CLAUDE.md` for the full architecture.
+
 ## Flash Layout
 
 3MB for the app, ~5MB for SPIFFS storage. Binary is ~1.2MB after release optimizations.
