@@ -280,6 +280,9 @@ impl Platform for Esp32Platform {
         // Use the legacy adc1 one-shot API for simplicity.
         // ADC1 channels on ESP32-S3: GPIO1-10.
         // Channel mapping: GPIO1=ADC1_CH0, GPIO2=ADC1_CH1, etc.
+        if pin < 1 || pin > 10 {
+            return Err(VmError::PlatformError);
+        }
         let channel = (pin - 1) as u32;
 
         unsafe {

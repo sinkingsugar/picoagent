@@ -103,6 +103,7 @@ impl<
         self.halted = false;
         self.ds.clear();
         self.rs.clear();
+        self.vars = [Value::I(0); 64];
         self.times_sp = 0;
         self.every_sp = 0;
         self.action_count = 0;
@@ -407,18 +408,12 @@ impl<
             Op::EndLoop(start_offset) => {
                 self.ip = start_offset as usize;
             }
-            Op::Break => {
-                // Scan backward for the enclosing Loop to get its end offset
-                let mut i = self.ip.saturating_sub(1);
-                loop {
-                    if let Op::Loop(end_off) = self.program[i] {
-                        self.ip = end_off as usize;
-                        break;
-                    }
-                    if i == 0 {
-                        return Err(VmError::ParseError);
-                    }
-                    i -= 1;
+            Op::Break(loop_start) => {
+                // Read the end offset from the Loop opcode (resolved at parse time).
+                if let Op::Loop(end_off) = self.program[loop_start as usize] {
+                    self.ip = end_off as usize;
+                } else {
+                    return Err(VmError::ParseError);
                 }
             }
 
@@ -799,11 +794,9 @@ impl Iterator for ActionDrain {
 
 /// Format i32 into a fixed buffer, return the string slice.
 fn format_i32(v: i32, buf: &mut [u8; 12]) -> &str {
-    let mut n = v;
-    let negative = n < 0;
-    if negative {
-        n = n.wrapping_neg();
-    }
+    let negative = v < 0;
+    // Work in u32 to handle i32::MIN correctly (wrapping_neg of MIN is MIN).
+    let mut n: u32 = if negative { (v as u32).wrapping_neg() } else { v as u32 };
     let mut pos = buf.len();
 
     if n == 0 {

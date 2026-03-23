@@ -293,7 +293,7 @@ fn test_loop_break() {
         Op::Lit(3),        // 5
         Op::Eq,            // 6
         Op::If(9),         // 7: if false → jump to 9 (EndLoop); true → fall through
-        Op::Break,         // 8: exit loop → scans for Loop(10), jumps to 10
+        Op::Break(1),      // 8: exit loop → reads Loop(10) at index 1, jumps to 10
         Op::EndLoop(1),    // 9: jump back to Loop at 1
         Op::Halt,          // 10
     ]);

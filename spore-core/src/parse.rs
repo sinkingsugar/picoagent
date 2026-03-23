@@ -217,7 +217,21 @@ pub fn parse<const SB: usize, const SC: usize, const DN: usize>(
                 len += 1;
             }
             "BREAK" => {
-                ops[len] = Op::Break;
+                // Find the enclosing LOOP on the fixup stack.
+                let mut found = false;
+                let mut fi = fixup_sp;
+                while fi > 0 {
+                    fi -= 1;
+                    if let FixupKind::LoopToEndLoop = fixup_stack[fi].kind {
+                        // Store the Loop opcode index so the VM can read its end offset.
+                        ops[len] = Op::Break(fixup_stack[fi].op_idx as u16);
+                        found = true;
+                        break;
+                    }
+                }
+                if !found {
+                    return Err(VmError::ParseError);
+                }
                 len += 1;
             }
 

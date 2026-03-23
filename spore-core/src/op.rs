@@ -68,8 +68,8 @@ pub enum Op {
     Loop(u16),
     /// Jump back to Loop start.
     EndLoop(u16),
-    /// Exit innermost loop.
-    Break,
+    /// Exit innermost loop. Offset resolved at parse time.
+    Break(u16),
     /// Pop count, jump to offset if count is 0.
     Times(u16),
     /// Decrement counter, jump back if count > 0.
