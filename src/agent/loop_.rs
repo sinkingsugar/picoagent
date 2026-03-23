@@ -24,7 +24,7 @@ pub struct AgentResponse {
 /// 1. Push user message to session
 /// 2. Call LLM with tools
 /// 3. If LLM returns tool_use, execute and feed results back
-/// 4. Repeat until end_turn or max iterations
+/// 4. Repeat until no tool calls or max iterations
 /// 5. Compact if needed
 /// 6. Return final text
 pub fn run(

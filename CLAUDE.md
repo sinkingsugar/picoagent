@@ -34,13 +34,14 @@ User ↔ Telegram (long poll) ↔ Agent Loop ↔ Claude API
                          Hardware   SPIFFS
 ```
 
-- **Agent loop** (`src/agent/loop_.rs`): The kernel. Push user msg → call LLM → execute tool calls → loop until `end_turn` or max iterations (15). ~125 lines.
+- **Agent loop** (`src/agent/loop_.rs`): The kernel. Push user msg → call LLM → execute tool calls → loop until no tool calls or max iterations (15). ~125 lines.
 - **Session** (`src/agent/session.rs`): Conversation history with compaction. Persists to SPIFFS as `session.json`. Compaction summarizes old messages via LLM, keeps last 4.
 - **Tools** (`src/tools/mod.rs`): The `Tool` trait is the primary extension point. Implement it, register in `main()`. That's the whole API.
 - **Claude client** (`src/llm/claude.rs`): Dual auth — standard API key (`x-api-key`) or OAuth token (`sk-ant-oat*` → `Authorization: Bearer` + beta headers + Claude Code trick).
 - **Telegram** (`src/telegram/polling.rs`): Long-poll `getUpdates`, single-user auth via chat_id, message chunking at 4096 chars.
-- **HTTP** (`src/net/http.rs`): Raw `EspHttpConnection` with `initiate_request`/`initiate_response`. No external HTTP crate.
-- **Storage** (`src/storage/spiffs.rs`): SPIFFS on flash, auto-formats on first mount. Key-value via `Storage` trait.
+- **HTTP** (`src/net/http.rs`): Raw `EspHttpConnection` with `initiate_request`/`initiate_response`. No external HTTP crate. Response body capped at 128KB to prevent OOM.
+- **Storage** (`src/storage/spiffs.rs`): SPIFFS on flash, auto-formats on first mount. Key-value via `Storage` trait. Keys validated against path traversal (`..`, leading `/`).
+- **WDT** (`src/wdt.rs`): Main task subscribes to TWDT, deregisters around long operations (Telegram poll, LLM calls). Idle tasks not monitored.
 - **WiFi** (`src/net/wifi.rs`): Connect + reconnect with poll-based timeout. Pattern proven from bme680-monitor.
 
 ## Key Design Decisions
@@ -94,7 +95,7 @@ User ↔ Telegram (long poll) ↔ Agent Loop ↔ Claude API
 
 ## Known Constraints
 
-- WDT max is 60s (ESP-IDF v5.3.3 limit). LLM calls can take up to 90s, so WDT is disabled on idle task CPUs.
+- WDT timeout is 60s (ESP-IDF v5.3.3 max). LLM calls can take up to 90s, so the main task is deregistered from TWDT around long operations and re-registered after. Idle tasks are not monitored (main task starves CPU0's idle during blocking reads). See `src/wdt.rs`.
 - SPIFFS is slow and has limited write cycles. Session saves happen after each agent response.
 - Binary must fit in 3MB (factory partition). Currently ~1.2MB with release optimizations.
 - No OTA yet — reflash via USB.

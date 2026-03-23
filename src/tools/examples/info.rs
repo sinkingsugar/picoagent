@@ -7,13 +7,13 @@ use serde_json::Value;
 
 /// System information tool.
 pub struct InfoTool {
-    boot_time: u64,
+    boot_time: u32,
 }
 
 impl InfoTool {
     pub fn new() -> Self {
         Self {
-            boot_time: unsafe { sys::esp_log_timestamp() } as u64,
+            boot_time: unsafe { sys::esp_log_timestamp() },
         }
     }
 }
@@ -37,8 +37,8 @@ impl Tool for InfoTool {
     fn execute(&mut self, _params: Value) -> Result<ToolOutput> {
         let free_heap = unsafe { sys::esp_get_free_heap_size() };
         let min_heap = unsafe { sys::esp_get_minimum_free_heap_size() };
-        let now = unsafe { sys::esp_log_timestamp() } as u64;
-        let uptime_ms = now.wrapping_sub(self.boot_time);
+        let now = unsafe { sys::esp_log_timestamp() };
+        let uptime_ms = now.wrapping_sub(self.boot_time) as u64;
         let uptime_s = uptime_ms / 1000;
 
         let report = format!(

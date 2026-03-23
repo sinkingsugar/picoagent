@@ -16,7 +16,11 @@ CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 
-# Watchdog — disabled because LLM API calls block the main task for up to 90s
-# and ESP-IDF v5.3.3 caps WDT at 60s. The main task runs the agent loop
-# synchronously, so it cannot feed the WDT during long HTTP reads.
-CONFIG_ESP_TASK_WDT_EN=n
+# Watchdog — enabled at max 60s. Idle tasks are not monitored because the
+# main task starves CPU0's idle during blocking HTTP reads. Instead, the main
+# task is explicitly subscribed and deregistered around long operations
+# (Telegram poll ≤40s, LLM calls ≤90s). See wdt module.
+CONFIG_ESP_TASK_WDT_EN=y
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=60
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=n
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1=n

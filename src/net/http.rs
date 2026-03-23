@@ -70,10 +70,10 @@ fn read_response_body(client: &mut EspHttpConnection) -> Result<String> {
         match esp_idf_svc::io::Read::read(client, &mut buf) {
             Ok(0) => break,
             Ok(n) => {
-                body.extend_from_slice(&buf[..n]);
-                if body.len() > MAX_RESPONSE_BYTES {
+                if body.len().saturating_add(n) > MAX_RESPONSE_BYTES {
                     bail!("response too large (>{} KB)", MAX_RESPONSE_BYTES / 1024);
                 }
+                body.extend_from_slice(&buf[..n]);
             }
             Err(e) => bail!("failed to read response: {e}"),
         }
