@@ -935,7 +935,7 @@ fn sqrt_approx(x: f32) -> f32 {
     // Initial guess via bit manipulation (Quake III style)
     let i = x.to_bits();
     let guess = f32::from_bits(0x5F37_5A86 - (i >> 1)); // ≈ 1/sqrt(x)
-    // Two Newton-Raphson refinements: y = y * (1.5 - 0.5*x*y*y)
+                                                        // Two Newton-Raphson refinements: y = y * (1.5 - 0.5*x*y*y)
     let half_x = 0.5 * x;
     let y = guess * (1.5 - half_x * guess * guess);
     let y = y * (1.5 - half_x * y * y);

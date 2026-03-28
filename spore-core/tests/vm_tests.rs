@@ -710,13 +710,13 @@ fn test_buf_alloc() {
 fn test_buf_get_set_u8() {
     let vm = run_ops(&[
         Op::Lit(4),
-        Op::BufAlloc,   // -- buf
+        Op::BufAlloc, // -- buf
         Op::Dup,
         Op::Lit(2),
         Op::Lit(0xAB),
-        Op::BufSetU8,   // buf[2] = 0xAB
+        Op::BufSetU8, // buf[2] = 0xAB
         Op::Lit(2),
-        Op::BufGetU8,   // -- 0xAB
+        Op::BufGetU8, // -- 0xAB
         Op::Halt,
     ]);
     assert_eq!(vm.ds.peek().unwrap().as_int(), 0xAB);
@@ -727,7 +727,7 @@ fn test_buf_get_u16le() {
     let mut vm = Vm::<NullPlatform>::new(NullPlatform);
     let buf_idx = vm.buffers.alloc_from(&[0x34, 0x12, 0x78, 0x56]).unwrap();
     vm.load(&[
-        Op::Lit(0),       // placeholder, will be replaced
+        Op::Lit(0), // placeholder, will be replaced
         Op::Lit(0),
         Op::BufGetU16Le,
         Op::Halt,
@@ -835,11 +835,18 @@ fn test_buf_roundtrip_via_parse() {
 #[test]
 fn test_flog() {
     let vm = run_ops(&[Op::FLit(1.0), Op::FLog, Op::Halt]);
-    assert!((vm.ds.peek().unwrap().as_float() - 0.0).abs() < 0.01, "ln(1) should be ~0");
+    assert!(
+        (vm.ds.peek().unwrap().as_float() - 0.0).abs() < 0.01,
+        "ln(1) should be ~0"
+    );
 
     let vm = run_ops(&[Op::FLit(2.718282), Op::FLog, Op::Halt]);
     let result = vm.ds.peek().unwrap().as_float();
-    assert!((result - 1.0).abs() < 0.01, "ln(e) should be ~1, got {}", result);
+    assert!(
+        (result - 1.0).abs() < 0.01,
+        "ln(e) should be ~1, got {}",
+        result
+    );
 }
 
 #[test]
@@ -847,7 +854,11 @@ fn test_flog_large_values() {
     // ln(1000) ≈ 6.9078
     let vm = run_ops(&[Op::FLit(1000.0), Op::FLog, Op::Halt]);
     let result = vm.ds.peek().unwrap().as_float();
-    assert!((result - 6.9078).abs() < 0.05, "ln(1000) should be ~6.9078, got {}", result);
+    assert!(
+        (result - 6.9078).abs() < 0.05,
+        "ln(1000) should be ~6.9078, got {}",
+        result
+    );
 }
 
 #[test]
@@ -860,11 +871,19 @@ fn test_flog_negative() {
 fn test_fsqrt() {
     let vm = run_ops(&[Op::FLit(4.0), Op::FSqrt, Op::Halt]);
     let result = vm.ds.peek().unwrap().as_float();
-    assert!((result - 2.0).abs() < 0.01, "sqrt(4) should be ~2, got {}", result);
+    assert!(
+        (result - 2.0).abs() < 0.01,
+        "sqrt(4) should be ~2, got {}",
+        result
+    );
 
     let vm = run_ops(&[Op::FLit(2.0), Op::FSqrt, Op::Halt]);
     let result = vm.ds.peek().unwrap().as_float();
-    assert!((result - 1.4142).abs() < 0.01, "sqrt(2) should be ~1.414, got {}", result);
+    assert!(
+        (result - 1.4142).abs() < 0.01,
+        "sqrt(2) should be ~1.414, got {}",
+        result
+    );
 }
 
 #[test]
@@ -885,7 +904,11 @@ fn test_flog_fsqrt_parse() {
     vm.program_len = result.len;
     vm.run();
     let val = vm.ds.peek().unwrap().as_float();
-    assert!((val - 10.0).abs() < 0.01, "sqrt(100) should be ~10, got {}", val);
+    assert!(
+        (val - 10.0).abs() < 0.01,
+        "sqrt(100) should be ~10, got {}",
+        val
+    );
 }
 
 // ---- BME680 example parsing ----
@@ -905,7 +928,11 @@ fn test_parse_bme680_temp_example() {
     assert!(result.entry.is_some(), "main entry should be found");
     // Print op count for reference (visible with --nocapture)
     eprintln!("bme680_temp: {} ops / 1024", result.len);
-    assert!(result.len < 1024, "should fit in program space: {} ops", result.len);
+    assert!(
+        result.len < 1024,
+        "should fit in program space: {} ops",
+        result.len
+    );
 }
 
 #[test]
@@ -922,7 +949,11 @@ fn test_parse_bme680_thp_example() {
     let result = result.unwrap();
     assert!(result.entry.is_some(), "main entry should be found");
     eprintln!("bme680_thp: {} ops / 1024", result.len);
-    assert!(result.len < 1024, "should fit in program space: {} ops", result.len);
+    assert!(
+        result.len < 1024,
+        "should fit in program space: {} ops",
+        result.len
+    );
 }
 
 // ---- Parse the full cactus monitor example from the spec ----
