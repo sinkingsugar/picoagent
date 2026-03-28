@@ -77,7 +77,7 @@ Control flow is structured (IF/ELSE/THEN, LOOP/ENDLOOP, TIMES/ENDTIMES, BEGIN/UN
 
 ## Platform Method Names (matches spec)
 
-I2C: `i2c_set_addr`, `i2c_write_byte`, `i2c_read_byte`, `i2c_write_buf`, `i2c_read_buf`, `bme_read`
+I2C: `i2c_set_addr`, `i2c_write_byte`, `i2c_read_byte`, `i2c_write_buf`, `i2c_read_buf`
 WiFi: `wifi_connect`, `wifi_status` (`&self`), `wifi_disconnect`, `wifi_ip`
 System: `millis` (`&self`), `nvs_get` (`&self`), `heap_free` (`&self`) — these are `&self`, rest are `&mut self`
 

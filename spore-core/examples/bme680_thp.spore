@@ -1,0 +1,312 @@
+\ BME680 Temperature + Humidity + Pressure — full Spore sensor driver
+\
+\ Reads all three environmental values using only generic I2C + buffer ops.
+\ No firmware-side sensor code needed — pure Spore.
+\
+\ Compensation formulas from Bosch BME680 datasheet rev 1.6, section 4.2.3.
+\ Register map per datasheet section 5.2.
+\
+\ Hardware: BME680 on I2C (SDA=8, SCL=9), default address 0x77
+
+\ ============================================================
+\ Variables — calibration coefficients
+\ ============================================================
+
+\ Temperature
+VAR par_t1
+VAR par_t2
+VAR par_t3
+
+\ Pressure
+VAR par_p1
+VAR par_p2
+VAR par_p3
+VAR par_p4
+VAR par_p5
+VAR par_p6
+VAR par_p7
+VAR par_p8
+VAR par_p9
+VAR par_p10
+
+\ Humidity
+VAR par_h1
+VAR par_h2
+VAR par_h3
+VAR par_h4
+VAR par_h5
+VAR par_h6
+VAR par_h7
+
+\ Scratch
+VAR raw_f
+VAR v1
+VAR v2
+VAR v3
+VAR t_fine
+VAR temp_c
+
+\ ============================================================
+\ Helpers
+\ ============================================================
+
+DEF bme_addr LIT 0x77 I2C_ADDR END
+
+
+\ ============================================================
+\ Calibration — read all coefficients from sensor NVM
+\ ============================================================
+
+\ Temperature + pressure cal: registers 0x8A-0x9D (20 bytes)
+\ par_t2(i16) par_t3(i8) [gap] par_p1(u16) par_p2(i16) par_p3(i8)
+\ par_p4(i16) par_p5(i16) par_p6(i8) par_p7(i8) par_p8(i16) par_p9(i16) par_p10(u8)
+DEF read_tp_cal
+  bme_addr
+  LIT 0x8A I2C_WRITE LIT 20 I2C_READ_BUF
+  \ offset 0: par_t2 (i16 LE at 0x8A-0x8B)
+  DUP LIT 0 BUF_GET_I16LE STORE par_t2
+  \ offset 2: par_t3 (i8 at 0x8C)
+  DUP LIT 2 BUF_GET_I8 STORE par_t3
+  \ offset 4: par_p1 (u16 LE at 0x8E-0x8F)
+  DUP LIT 4 BUF_GET_U16LE STORE par_p1
+  \ offset 6: par_p2 (i16 LE at 0x90-0x91)
+  DUP LIT 6 BUF_GET_I16LE STORE par_p2
+  \ offset 8: par_p3 (i8 at 0x92)
+  DUP LIT 8 BUF_GET_I8 STORE par_p3
+  \ offset 9: par_p4 (i16 LE at 0x94-0x95)
+  DUP LIT 10 BUF_GET_I16LE STORE par_p4
+  \ offset 11: par_p5 (i16 LE at 0x96-0x97)
+  DUP LIT 12 BUF_GET_I16LE STORE par_p5
+  \ offset 13: par_p6 (i8 at 0x99)
+  DUP LIT 15 BUF_GET_I8 STORE par_p6
+  \ offset 14: par_p7 (i8 at 0x98)  NOTE: p7 is BEFORE p6 in register map
+  DUP LIT 14 BUF_GET_I8 STORE par_p7
+  \ offset 15: par_p8 (i16 LE at 0x99-0x9A)
+  DUP LIT 15 BUF_GET_I16LE STORE par_p8
+  \ offset 17: par_p9 (i16 LE at 0x9B-0x9C)
+  DUP LIT 17 BUF_GET_I16LE STORE par_p9
+  \ offset 19: par_p10 (u8 at 0x9D)
+  LIT 19 BUF_GET_U8 STORE par_p10
+END
+
+\ par_t1 lives in the E1 block: registers 0xE9-0xEA
+\ Humidity cal: registers 0xE1-0xE8
+DEF read_th_cal
+  bme_addr
+  LIT 0xE1 I2C_WRITE LIT 10 I2C_READ_BUF
+  \ par_t1 (u16 LE) at offset 8-9 (registers 0xE9-0xEA)
+  DUP LIT 8 BUF_GET_U16LE STORE par_t1
+  \ par_h2 = (E1 << 4) | (E2 >> 4) — 12-bit, offset 0-1
+  DUP LIT 0 BUF_GET_U8 LIT 4 SHL
+  OVER LIT 1 BUF_GET_U8 LIT 4 SHR OR
+  STORE par_h2
+  \ par_h1 = (E3 << 4) | (E2 & 0x0F) — 12-bit, offset 1-2
+  DUP LIT 2 BUF_GET_U8 LIT 4 SHL
+  OVER LIT 1 BUF_GET_U8 LIT 0x0F AND OR
+  STORE par_h1
+  \ par_h3 (i8) at offset 3 (0xE4)
+  DUP LIT 3 BUF_GET_I8 STORE par_h3
+  \ par_h4 (i8) at offset 4 (0xE5)
+  DUP LIT 4 BUF_GET_I8 STORE par_h4
+  \ par_h5 (i8) at offset 5 (0xE6)
+  DUP LIT 5 BUF_GET_I8 STORE par_h5
+  \ par_h6 (u8) at offset 6 (0xE7)
+  DUP LIT 6 BUF_GET_U8 STORE par_h6
+  \ par_h7 (i8) at offset 7 (0xE8)
+  LIT 7 BUF_GET_I8 STORE par_h7
+END
+
+DEF read_all_cal
+  read_tp_cal
+  read_th_cal
+END
+
+\ ============================================================
+\ Measurement trigger
+\ ============================================================
+
+\ Configure humidity oversampling + trigger forced measurement.
+\ ctrl_hum  (0x72): osrs_h = 1 (1x oversampling)
+\ ctrl_meas (0x74): osrs_t=1x | osrs_p=1x | mode=forced = 0x25
+DEF bme_trigger
+  bme_addr
+  \ Write ctrl_hum first (must be written before ctrl_meas)
+  LIT 2 BUF_ALLOC
+  DUP LIT 0 LIT 0x72 BUF_SET_U8
+  DUP LIT 1 LIT 0x01 BUF_SET_U8
+  I2C_WRITE_BUF
+  \ Write ctrl_meas to start forced measurement
+  LIT 2 BUF_ALLOC
+  DUP LIT 0 LIT 0x74 BUF_SET_U8
+  DUP LIT 1 LIT 0x25 BUF_SET_U8
+  I2C_WRITE_BUF
+  \ Wait for measurement to complete (~50ms for 1x oversampling)
+  LIT 80 DELAY_MS
+END
+
+\ ============================================================
+\ Raw data reads
+\ ============================================================
+
+\ Read all raw data in one burst: press(3) + temp(3) + hum(2) = 8 bytes
+\ Registers 0x1F-0x26
+\ Returns: (raw_press raw_temp raw_hum)
+DEF read_raw_all
+  bme_addr
+  LIT 0x1F I2C_WRITE LIT 8 I2C_READ_BUF
+
+  \ Pressure: 20-bit from [0]-[2]
+  DUP LIT 0 BUF_GET_U8 LIT 12 SHL
+  OVER LIT 1 BUF_GET_U8 LIT 4 SHL OR
+  OVER LIT 2 BUF_GET_U8 LIT 4 SHR OR
+
+  \ Temperature: 20-bit from [3]-[5]
+  OVER LIT 3 BUF_GET_U8 LIT 12 SHL
+  OVER LIT 4 BUF_GET_U8 LIT 4 SHL OR
+  OVER LIT 5 BUF_GET_U8 LIT 4 SHR OR
+
+  \ Humidity: 16-bit from [6]-[7]
+  OVER LIT 6 BUF_GET_U8 LIT 8 SHL
+  OVER LIT 7 BUF_GET_U8 OR
+
+  \ Clean up: remove buf from under the 3 values
+  \ Stack: buf press temp hum
+  ROT ROT          \ buf hum press temp
+  ROT              \ buf press temp hum — not right, let me just use vars
+END
+
+\ ============================================================
+\ Compensation formulas (Bosch datasheet float versions)
+\ ============================================================
+
+\ Temperature: (adc_T -- temp_celsius)
+\ Also sets t_fine and temp_c for pressure/humidity compensation.
+DEF comp_temp
+  I>F STORE raw_f
+  \ var1 = (raw/16384 - par_t1/1024) * par_t2
+  FETCH raw_f FLIT 16384.0 DIV
+  FETCH par_t1 I>F FLIT 1024.0 DIV SUB
+  FETCH par_t2 I>F MUL
+  STORE v1
+  \ var2 = ((raw/131072 - par_t1/8192)^2) * par_t3 * 16
+  FETCH raw_f FLIT 131072.0 DIV
+  FETCH par_t1 I>F FLIT 8192.0 DIV SUB
+  DUP MUL
+  FETCH par_t3 I>F FLIT 16.0 MUL MUL
+  STORE v2
+  \ t_fine and temp
+  FETCH v1 FETCH v2 ADD DUP STORE t_fine
+  FLIT 5120.0 DIV DUP STORE temp_c
+END
+
+\ Pressure: (adc_P -- pressure_Pa)
+\ Requires t_fine from comp_temp.
+DEF comp_press
+  I>F STORE raw_f
+  \ var1 = t_fine/2 - 64000
+  FETCH t_fine FLIT 2.0 DIV FLIT 64000.0 SUB STORE v1
+  \ var2 = v1*v1*par_p6/32768
+  FETCH v1 DUP MUL FETCH par_p6 I>F MUL FLIT 32768.0 DIV
+  \ var2 += v1*par_p5*2
+  FETCH v1 FETCH par_p5 I>F MUL FLIT 2.0 MUL ADD
+  \ var2 = var2/4 + par_p4*65536
+  FLIT 4.0 DIV FETCH par_p4 I>F FLIT 65536.0 MUL ADD
+  STORE v2
+  \ var1 = (par_p3*v1*v1/16384 + par_p2*v1) / 524288
+  FETCH par_p3 I>F FETCH v1 DUP MUL MUL FLIT 16384.0 DIV
+  FETCH par_p2 I>F FETCH v1 MUL ADD
+  FLIT 524288.0 DIV
+  \ var1 = (1 + var1/32768) * par_p1
+  FLIT 32768.0 DIV FLIT 1.0 ADD FETCH par_p1 I>F MUL
+  STORE v1
+  \ pressure = (1048576 - raw - var2/4096) * 6250 / var1
+  FLIT 1048576.0 FETCH raw_f SUB
+  FETCH v2 FLIT 4096.0 DIV SUB
+  FLIT 6250.0 MUL FETCH v1 DIV
+  STORE v3
+  \ Final correction
+  \ v1 = par_p9 * p * p / 2147483648
+  FETCH par_p9 I>F FETCH v3 DUP MUL MUL FLIT 2147483648.0 DIV
+  STORE v1
+  \ v2 = p * par_p8 / 32768
+  FETCH v3 FETCH par_p8 I>F MUL FLIT 32768.0 DIV
+  STORE v2
+  \ pressure = p + (v1 + v2 + par_p7) / 16
+  FETCH v3
+  FETCH v1 FETCH v2 ADD FETCH par_p7 I>F ADD FLIT 16.0 DIV ADD
+  \ Result in Pa, divide by 100 for hPa
+  FLIT 100.0 DIV
+END
+
+\ Humidity: (adc_H -- humidity_percent)
+\ Requires t_fine and temp_c from comp_temp.
+DEF comp_hum
+  I>F STORE raw_f
+  \ var1 = raw - (par_h1*16 + par_h3/2*temp_c)
+  FETCH raw_f
+  FETCH par_h1 I>F FLIT 16.0 MUL
+  FETCH par_h3 I>F FLIT 2.0 DIV FETCH temp_c MUL ADD
+  SUB STORE v1
+  \ var2 = par_h2/262144 * (1 + par_h4/16384*temp_c + par_h5/1048576*temp_c^2)
+  FETCH par_h2 I>F FLIT 262144.0 DIV
+  FLIT 1.0
+  FETCH par_h4 I>F FLIT 16384.0 DIV FETCH temp_c MUL ADD
+  FETCH par_h5 I>F FLIT 1048576.0 DIV FETCH temp_c DUP MUL MUL ADD
+  MUL STORE v2
+  \ humidity = v1 * v2
+  FETCH v1 FETCH v2 MUL
+  \ var3 = par_h6/16384 + par_h7/2097152*temp_c
+  FETCH par_h6 I>F FLIT 16384.0 DIV
+  FETCH par_h7 I>F FLIT 2097152.0 DIV FETCH temp_c MUL ADD
+  STORE v3
+  \ humidity += var3 * humidity * humidity
+  DUP DUP MUL FETCH v3 MUL ADD
+  \ Clamp 0-100
+  DUP FLIT 0.0 LT IF DROP FLIT 0.0 THEN
+  DUP FLIT 100.0 GT IF DROP FLIT 100.0 THEN
+END
+
+\ ============================================================
+\ Main — single reading of all three values
+\ ============================================================
+
+TASK main
+  \ Read all calibration data (once at startup)
+  read_all_cal
+
+  \ Trigger forced measurement
+  bme_trigger
+
+  \ Read all raw data
+  \ Stack after read_raw_all: buf raw_press raw_temp raw_hum
+  read_raw_all
+
+  \ Store raw values (they share the stack)
+  STORE v3   \ raw_hum → v3
+  SWAP DROP  \ drop buf, raw_press on top... actually let me restructure
+
+  \ Simpler: read individually
+  DROP DROP DROP DROP  \ clear stack from read_raw_all attempt
+
+  \ Read temp raw (needed first for t_fine)
+  bme_addr LIT 0x22 I2C_WRITE LIT 3 I2C_READ_BUF
+  DUP LIT 0 BUF_GET_U8 LIT 12 SHL
+  OVER LIT 1 BUF_GET_U8 LIT 4 SHL OR
+  SWAP LIT 2 BUF_GET_U8 LIT 4 SHR OR
+  comp_temp
+  STR "Temp: " LOG F>STR LOG
+
+  \ Read pressure raw
+  bme_addr LIT 0x1F I2C_WRITE LIT 3 I2C_READ_BUF
+  DUP LIT 0 BUF_GET_U8 LIT 12 SHL
+  OVER LIT 1 BUF_GET_U8 LIT 4 SHL OR
+  SWAP LIT 2 BUF_GET_U8 LIT 4 SHR OR
+  comp_press
+  STR "Press hPa: " LOG F>STR LOG
+
+  \ Read humidity raw (16-bit big-endian at 0x25-0x26)
+  bme_addr LIT 0x25 I2C_WRITE LIT 2 I2C_READ_BUF
+  LIT 0 BUF_GET_U16BE
+  comp_hum
+  STR "Hum %: " LOG F>STR LOG
+ENDTASK

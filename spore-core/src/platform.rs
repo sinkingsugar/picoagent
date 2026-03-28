@@ -52,10 +52,6 @@ pub trait Platform {
     fn i2c_read_buf(&mut self, _buf: &mut [u8]) -> PlatformResult<()> {
         Err(VmError::PlatformError)
     }
-    fn bme_read(&mut self) -> PlatformResult<(f32, f32, f32)> {
-        Err(VmError::PlatformError)
-    }
-
     // --- SPI ---
     fn spi_init(&mut self, _clk: i32, _mosi: i32, _miso: i32, _cs: i32) -> PlatformResult<()> {
         Err(VmError::PlatformError)

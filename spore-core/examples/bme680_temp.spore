@@ -1,0 +1,121 @@
+\ BME680 Temperature Reading — Spore sensor driver example
+\
+\ Demonstrates the pattern for implementing I2C sensor drivers in Spore:
+\   1. Read calibration registers into buffers
+\   2. Extract coefficients with BUF_GET_* ops
+\   3. Trigger measurement via register write
+\   4. Read raw data registers
+\   5. Apply compensation formula (Bosch datasheet section 4.2.3)
+\
+\ Hardware: BME680 on I2C bus (SDA=8, SCL=9), address 0x77
+\ Registers per Bosch BME680 datasheet rev 1.6
+
+\ --- Variables ---
+VAR par_t1
+VAR par_t2
+VAR par_t3
+VAR raw_f
+VAR v1
+VAR v2
+
+\ --- Helpers ---
+
+\ Set BME680 I2C address (0x77 default, 0x76 if SDO tied to GND)
+DEF bme_addr LIT 0x77 I2C_ADDR END
+
+
+\ Write a single-byte value to a register
+\ Stack: (register_addr value --)
+DEF bme_write_reg
+  LIT 2 BUF_ALLOC
+  DUP ROT ROT           \ buf buf reg val
+  SWAP                   \ buf buf val reg
+  ROT                    \ buf val reg buf
+  SWAP LIT 0 SWAP BUF_SET_U8   \ buf[0] = reg
+  LIT 1 SWAP BUF_SET_U8        \ buf[1] = val
+  I2C_WRITE_BUF
+END
+
+\ --- Calibration ---
+
+\ Read temperature calibration coefficients from sensor NVM.
+\ BME680 splits cal data across two register banks:
+\   par_t1 (uint16 LE): registers 0xE9-0xEA
+\   par_t2 (int16 LE):  registers 0x8A-0x8B
+\   par_t3 (int8):      register  0x8C
+DEF read_temp_cal
+  bme_addr
+
+  \ Read par_t1 from 0xE9 (2 bytes)
+  LIT 0xE9 I2C_WRITE LIT 2 I2C_READ_BUF
+  LIT 0 BUF_GET_U16LE STORE par_t1
+
+  \ Read par_t2 + par_t3 from 0x8A (3 bytes)
+  LIT 0x8A I2C_WRITE LIT 3 I2C_READ_BUF
+  DUP LIT 0 BUF_GET_I16LE STORE par_t2
+  LIT 2 BUF_GET_I8 STORE par_t3
+END
+
+\ --- Measurement ---
+
+\ Trigger forced-mode temperature measurement.
+\ ctrl_meas (0x74): osrs_t=001 (1x) bits[7:5] | mode=01 (forced) bits[1:0]
+\ = (1 << 5) | 1 = 0x21
+DEF bme_trigger
+  bme_addr
+  LIT 2 BUF_ALLOC
+  DUP LIT 0 LIT 0x74 BUF_SET_U8
+  DUP LIT 1 LIT 0x21 BUF_SET_U8
+  I2C_WRITE_BUF
+  LIT 50 DELAY_MS
+END
+
+\ Read 20-bit raw temperature from data registers 0x22-0x24.
+\ Result: adc_T = (MSB << 12) | (LSB << 4) | (XLSB >> 4)
+DEF read_raw_temp
+  bme_addr
+  LIT 0x22 I2C_WRITE LIT 3 I2C_READ_BUF
+  DUP LIT 0 BUF_GET_U8 LIT 12 SHL
+  OVER LIT 1 BUF_GET_U8 LIT 4 SHL OR
+  SWAP LIT 2 BUF_GET_U8 LIT 4 SHR OR
+END
+
+\ --- Compensation (Bosch float formula) ---
+
+\ Compensate raw temperature to degrees Celsius.
+\ Stack: (adc_T_int -- temp_float)
+\
+\ Bosch formula:
+\   var1 = (adc_T/16384 - par_t1/1024) * par_t2
+\   var2 = ((adc_T/131072 - par_t1/8192)^2) * par_t3 * 16
+\   temp = (var1 + var2) / 5120
+DEF compensate_temp
+  I>F STORE raw_f
+
+  \ var1 = (raw/16384 - par_t1/1024) * par_t2
+  FETCH raw_f FLIT 16384.0 DIV
+  FETCH par_t1 I>F FLIT 1024.0 DIV SUB
+  FETCH par_t2 I>F MUL
+  STORE v1
+
+  \ var2 = ((raw/131072 - par_t1/8192)^2) * par_t3 * 16
+  FETCH raw_f FLIT 131072.0 DIV
+  FETCH par_t1 I>F FLIT 8192.0 DIV SUB
+  DUP MUL
+  FETCH par_t3 I>F FLIT 16.0 MUL MUL
+  STORE v2
+
+  \ temp = (var1 + var2) / 5120
+  FETCH v1 FETCH v2 ADD
+  FLIT 5120.0 DIV
+END
+
+\ --- Main ---
+
+TASK main
+  read_temp_cal
+  bme_trigger
+  read_raw_temp
+  compensate_temp
+  F>STR LOG
+ENDTASK

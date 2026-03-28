@@ -67,29 +67,6 @@ struct PwmTimer {
     timer_num: sys::ledc_timer_t,
 }
 
-/// BME280 calibration data read from sensor NVM.
-/// Per Bosch datasheet section 4.2.2.
-struct BmeCalibration {
-    dig_t1: u16,
-    dig_t2: i16,
-    dig_t3: i16,
-    dig_p1: u16,
-    dig_p2: i16,
-    dig_p3: i16,
-    dig_p4: i16,
-    dig_p5: i16,
-    dig_p6: i16,
-    dig_p7: i16,
-    dig_p8: i16,
-    dig_p9: i16,
-    dig_h1: u8,
-    dig_h2: i16,
-    dig_h3: u8,
-    dig_h4: i16,
-    dig_h5: i16,
-    dig_h6: i8,
-}
-
 /// Spore platform backend for ESP32-S3.
 ///
 /// Uses raw esp-idf syscalls for GPIO, PWM (LEDC), ADC, and I2C.
@@ -107,8 +84,6 @@ pub struct Esp32Platform {
     i2c_addr: u8,
     /// Whether the I2C driver has been initialized.
     i2c_initialized: bool,
-    /// Cached BME280 calibration data (loaded once per I2C address).
-    bme_calibration: Option<(u8, BmeCalibration)>, // (addr, cal)
 }
 
 impl Esp32Platform {
@@ -121,7 +96,6 @@ impl Esp32Platform {
             pwm_timer_count: 0,
             i2c_addr: 0,
             i2c_initialized: false,
-            bme_calibration: None,
         }
     }
 
@@ -186,81 +160,6 @@ impl Esp32Platform {
         });
         self.pwm_count += 1;
         Some(channel)
-    }
-
-    /// Read a block of I2C registers starting at `reg`.
-    fn i2c_read_regs(&self, reg: u8, buf: &mut [u8]) -> PlatformResult<()> {
-        let reg_buf = [reg];
-        let ret = unsafe {
-            sys::i2c_master_write_to_device(
-                I2C_PORT,
-                self.i2c_addr,
-                reg_buf.as_ptr(),
-                1,
-                I2C_TIMEOUT_TICKS,
-            )
-        };
-        esp_ok(ret)?;
-        let ret = unsafe {
-            sys::i2c_master_read_from_device(
-                I2C_PORT,
-                self.i2c_addr,
-                buf.as_mut_ptr(),
-                buf.len(),
-                I2C_TIMEOUT_TICKS,
-            )
-        };
-        esp_ok(ret)
-    }
-
-    /// Read BME280 calibration data from sensor NVM registers.
-    /// Per Bosch BME280 datasheet section 4.2.2.
-    fn read_bme_calibration(&mut self) -> PlatformResult<BmeCalibration> {
-        // Temperature and pressure calibration: 0x88..0x9F (26 bytes)
-        let mut tp = [0u8; 26];
-        self.i2c_read_regs(0x88, &mut tp)?;
-
-        // Humidity calibration part 1: 0xA1 (1 byte)
-        let mut h1 = [0u8; 1];
-        self.i2c_read_regs(0xA1, &mut h1)?;
-
-        // Humidity calibration part 2: 0xE1..0xE7 (7 bytes)
-        let mut h2 = [0u8; 7];
-        self.i2c_read_regs(0xE1, &mut h2)?;
-
-        Ok(BmeCalibration {
-            dig_t1: u16::from_le_bytes([tp[0], tp[1]]),
-            dig_t2: i16::from_le_bytes([tp[2], tp[3]]),
-            dig_t3: i16::from_le_bytes([tp[4], tp[5]]),
-            dig_p1: u16::from_le_bytes([tp[6], tp[7]]),
-            dig_p2: i16::from_le_bytes([tp[8], tp[9]]),
-            dig_p3: i16::from_le_bytes([tp[10], tp[11]]),
-            dig_p4: i16::from_le_bytes([tp[12], tp[13]]),
-            dig_p5: i16::from_le_bytes([tp[14], tp[15]]),
-            dig_p6: i16::from_le_bytes([tp[16], tp[17]]),
-            dig_p7: i16::from_le_bytes([tp[18], tp[19]]),
-            dig_p8: i16::from_le_bytes([tp[20], tp[21]]),
-            dig_p9: i16::from_le_bytes([tp[22], tp[23]]),
-            dig_h1: h1[0],
-            dig_h2: i16::from_le_bytes([h2[0], h2[1]]),
-            dig_h3: h2[2],
-            dig_h4: ((h2[3] as i16) << 4) | ((h2[4] as i16) & 0x0F),
-            dig_h5: ((h2[5] as i16) << 4) | (((h2[4] as i16) >> 4) & 0x0F),
-            dig_h6: h2[6] as i8,
-        })
-    }
-
-    /// Get or read BME280 calibration for the current I2C address.
-    fn ensure_bme_calibration(&mut self) -> PlatformResult<&BmeCalibration> {
-        let addr = self.i2c_addr;
-        if let Some((cached_addr, _)) = &self.bme_calibration {
-            if *cached_addr == addr {
-                return Ok(&self.bme_calibration.as_ref().unwrap().1);
-            }
-        }
-        let cal = self.read_bme_calibration()?;
-        self.bme_calibration = Some((addr, cal));
-        Ok(&self.bme_calibration.as_ref().unwrap().1)
     }
 
     /// Ensure the I2C driver is initialized.
@@ -553,74 +452,6 @@ impl Platform for Esp32Platform {
         esp_ok(ret)
     }
 
-    fn bme_read(&mut self) -> PlatformResult<(f32, f32, f32)> {
-        // BME280 read via I2C. Requires I2C_ADDR to be set first (0x76 or 0x77).
-        // Reads calibration data from NVM on first call, then applies Bosch
-        // compensation formulas (datasheet section 4.2.3).
-        self.ensure_i2c()?;
-
-        // Ensure calibration data is loaded for this address
-        self.ensure_bme_calibration()?;
-
-        // Read raw data burst from 0xF7-0xFE (8 bytes)
-        let mut data = [0u8; 8];
-        self.i2c_read_regs(0xF7, &mut data)?;
-
-        // Raw values (20-bit pressure/temp, 16-bit humidity)
-        let raw_press =
-            ((data[0] as i32) << 12) | ((data[1] as i32) << 4) | ((data[2] as i32) >> 4);
-        let raw_temp = ((data[3] as i32) << 12) | ((data[4] as i32) << 4) | ((data[5] as i32) >> 4);
-        let raw_hum = ((data[6] as i32) << 8) | (data[7] as i32);
-
-        let cal = &self.bme_calibration.as_ref().unwrap().1;
-
-        // Temperature compensation (Bosch datasheet 4.2.3)
-        let var1 = (raw_temp as f32 / 16384.0 - cal.dig_t1 as f32 / 1024.0) * cal.dig_t2 as f32;
-        let d = raw_temp as f32 / 131072.0 - cal.dig_t1 as f32 / 8192.0;
-        let var2 = d * d * cal.dig_t3 as f32;
-        let t_fine = var1 + var2;
-        let temp = t_fine / 5120.0;
-
-        // Pressure compensation
-        let mut pvar1 = t_fine / 2.0 - 64000.0;
-        let mut pvar2 = pvar1 * pvar1 * cal.dig_p6 as f32 / 32768.0;
-        pvar2 += pvar1 * cal.dig_p5 as f32 * 2.0;
-        pvar2 = pvar2 / 4.0 + cal.dig_p4 as f32 * 65536.0;
-        pvar1 =
-            (cal.dig_p3 as f32 * pvar1 * pvar1 / 524288.0 + cal.dig_p2 as f32 * pvar1) / 524288.0;
-        pvar1 = (1.0 + pvar1 / 32768.0) * cal.dig_p1 as f32;
-        let press = if pvar1 > 0.0 {
-            let mut p = 1048576.0 - raw_press as f32;
-            p = (p - pvar2 / 4096.0) * 6250.0 / pvar1;
-            pvar1 = cal.dig_p9 as f32 * p * p / 2147483648.0;
-            pvar2 = p * cal.dig_p8 as f32 / 32768.0;
-            (p + (pvar1 + pvar2 + cal.dig_p7 as f32) / 16.0) / 100.0 // Pa → hPa
-        } else {
-            0.0
-        };
-
-        // Humidity compensation
-        let mut h = t_fine - 76800.0;
-        if h == 0.0 {
-            return Ok((temp, 0.0, press));
-        }
-        h = (raw_hum as f32 - (cal.dig_h4 as f32 * 64.0 + cal.dig_h5 as f32 / 16384.0 * h))
-            * (cal.dig_h2 as f32 / 65536.0
-                * (1.0
-                    + cal.dig_h6 as f32 / 67108864.0
-                        * h
-                        * (1.0 + cal.dig_h3 as f32 / 67108864.0 * h)));
-        h *= 1.0 - cal.dig_h1 as f32 * h / 524288.0;
-        let hum = if h > 100.0 {
-            100.0
-        } else if h < 0.0 {
-            0.0
-        } else {
-            h
-        };
-
-        Ok((temp, hum, press))
-    }
 }
 
 // ---------------------------------------------------------------------------

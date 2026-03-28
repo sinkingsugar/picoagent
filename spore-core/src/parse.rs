@@ -10,7 +10,7 @@ use crate::VmError;
 
 /// Parse result: program ops and metadata.
 #[derive(Debug)]
-pub struct ParseResult<const N: usize = 1024> {
+pub struct ParseResult<const N: usize = 2048> {
     pub ops: [Op; N],
     pub len: usize,
     /// Entry point offset (offset of `main` task body, or None).
@@ -48,8 +48,8 @@ pub fn parse<const SB: usize, const SC: usize, const DN: usize>(
     input: &str,
     strings: &mut StringPool<SB, SC>,
     dict: &mut Dict<DN>,
-) -> Result<ParseResult<1024>, VmError> {
-    let mut ops = [Op::Nop; 1024];
+) -> Result<ParseResult<2048>, VmError> {
+    let mut ops = [Op::Nop; 2048];
     let mut len: usize = 0;
     let mut fixup_stack: [Fixup; 64] = core::array::from_fn(|_| Fixup {
         op_idx: 0,
@@ -544,6 +544,54 @@ pub fn parse<const SB: usize, const SC: usize, const DN: usize>(
                 len += 1;
             }
 
+            // --- Buffer access ---
+            "BUF_ALLOC" => {
+                ops[len] = Op::BufAlloc;
+                len += 1;
+            }
+            "BUF_GET_U8" => {
+                ops[len] = Op::BufGetU8;
+                len += 1;
+            }
+            "BUF_GET_I8" => {
+                ops[len] = Op::BufGetI8;
+                len += 1;
+            }
+            "BUF_SET_U8" => {
+                ops[len] = Op::BufSetU8;
+                len += 1;
+            }
+            "BUF_GET_U16LE" => {
+                ops[len] = Op::BufGetU16Le;
+                len += 1;
+            }
+            "BUF_GET_I16LE" => {
+                ops[len] = Op::BufGetI16Le;
+                len += 1;
+            }
+            "BUF_GET_U16BE" => {
+                ops[len] = Op::BufGetU16Be;
+                len += 1;
+            }
+            "BUF_GET_I16BE" => {
+                ops[len] = Op::BufGetI16Be;
+                len += 1;
+            }
+            "BUF_LEN" => {
+                ops[len] = Op::BufLen;
+                len += 1;
+            }
+
+            // --- Math ---
+            "FLOG" => {
+                ops[len] = Op::FLog;
+                len += 1;
+            }
+            "FSQRT" => {
+                ops[len] = Op::FSqrt;
+                len += 1;
+            }
+
             // --- Platform ---
             "GPIO_MODE" => {
                 ops[len] = Op::PGpioMode;
@@ -594,11 +642,6 @@ pub fn parse<const SB: usize, const SC: usize, const DN: usize>(
                 ops[len] = Op::PI2cReadBuf;
                 len += 1;
             }
-            "BME_READ" => {
-                ops[len] = Op::PBmeRead;
-                len += 1;
-            }
-
             "SPI_INIT" => {
                 ops[len] = Op::PSpiInit;
                 len += 1;

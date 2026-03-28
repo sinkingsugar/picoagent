@@ -117,13 +117,38 @@ pub enum Op {
     PPwmInit,
     PPwmDuty,
 
+    // --- Buffer access ---
+    /// Allocate a zero-initialized buffer. (size -- buf)
+    BufAlloc,
+    /// Read unsigned byte from buffer at offset. (buf offset -- u8)
+    BufGetU8,
+    /// Read signed byte from buffer at offset, sign-extended. (buf offset -- i8)
+    BufGetI8,
+    /// Write byte into buffer at offset. (buf offset value --)
+    BufSetU8,
+    /// Read little-endian u16 from buffer. (buf offset -- u16)
+    BufGetU16Le,
+    /// Read little-endian i16 from buffer (sign-extended). (buf offset -- i16)
+    BufGetI16Le,
+    /// Read big-endian u16 from buffer. (buf offset -- u16)
+    BufGetU16Be,
+    /// Read big-endian i16 from buffer (sign-extended). (buf offset -- i16)
+    BufGetI16Be,
+    /// Get buffer length. (buf -- len)
+    BufLen,
+
+    // --- Math ---
+    /// Natural logarithm. (float -- float)
+    FLog,
+    /// Square root. (float -- float)
+    FSqrt,
+
     // --- Platform: I2C ---
     PI2cAddr,
     PI2cWrite,
     PI2cRead,
     PI2cWriteBuf,
     PI2cReadBuf,
-    PBmeRead,
 
     // --- Platform: SPI ---
     PSpiInit,

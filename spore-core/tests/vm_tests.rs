@@ -698,6 +698,233 @@ fn test_scheduler_event_wakeup() {
     assert_eq!(task.ds.peek().unwrap().as_int(), 99);
 }
 
+// ---- Buffer byte-access ops ----
+
+#[test]
+fn test_buf_alloc() {
+    let vm = run_ops(&[Op::Lit(8), Op::BufAlloc, Op::BufLen, Op::Halt]);
+    assert_eq!(vm.ds.peek().unwrap().as_int(), 8);
+}
+
+#[test]
+fn test_buf_get_set_u8() {
+    let vm = run_ops(&[
+        Op::Lit(4),
+        Op::BufAlloc,   // -- buf
+        Op::Dup,
+        Op::Lit(2),
+        Op::Lit(0xAB),
+        Op::BufSetU8,   // buf[2] = 0xAB
+        Op::Lit(2),
+        Op::BufGetU8,   // -- 0xAB
+        Op::Halt,
+    ]);
+    assert_eq!(vm.ds.peek().unwrap().as_int(), 0xAB);
+}
+
+#[test]
+fn test_buf_get_u16le() {
+    let mut vm = Vm::<NullPlatform>::new(NullPlatform);
+    let buf_idx = vm.buffers.alloc_from(&[0x34, 0x12, 0x78, 0x56]).unwrap();
+    vm.load(&[
+        Op::Lit(0),       // placeholder, will be replaced
+        Op::Lit(0),
+        Op::BufGetU16Le,
+        Op::Halt,
+    ]);
+    // Manually set up: push buf, then offset 0
+    vm.ds.push(Value::Buf(buf_idx)).unwrap();
+    vm.ds.push(Value::I(0)).unwrap();
+    vm.ip = 2; // skip the two Lit ops, start at BufGetU16Le
+    vm.run();
+    assert_eq!(vm.ds.peek().unwrap().as_int(), 0x1234);
+}
+
+#[test]
+fn test_buf_get_i16le_negative() {
+    let mut vm = Vm::<NullPlatform>::new(NullPlatform);
+    // -200 as i16 LE = 0xFF38 → bytes [0x38, 0xFF]
+    let buf_idx = vm.buffers.alloc_from(&[0x38, 0xFF]).unwrap();
+    vm.load(&[Op::BufGetI16Le, Op::Halt]);
+    vm.ds.push(Value::Buf(buf_idx)).unwrap();
+    vm.ds.push(Value::I(0)).unwrap();
+    vm.run();
+    assert_eq!(vm.ds.peek().unwrap().as_int(), -200);
+}
+
+#[test]
+fn test_buf_get_i8() {
+    let mut vm = Vm::<NullPlatform>::new(NullPlatform);
+    // 0xE0 as i8 = -32
+    let buf_idx = vm.buffers.alloc_from(&[0x7F, 0x80, 0xE0]).unwrap();
+    vm.load(&[Op::BufGetI8, Op::Halt]);
+    vm.ds.push(Value::Buf(buf_idx)).unwrap();
+    vm.ds.push(Value::I(0)).unwrap();
+    vm.run();
+    assert_eq!(vm.ds.peek().unwrap().as_int(), 127); // 0x7F = 127
+
+    let mut vm = Vm::<NullPlatform>::new(NullPlatform);
+    let buf_idx = vm.buffers.alloc_from(&[0x7F, 0x80, 0xE0]).unwrap();
+    vm.load(&[Op::BufGetI8, Op::Halt]);
+    vm.ds.push(Value::Buf(buf_idx)).unwrap();
+    vm.ds.push(Value::I(1)).unwrap();
+    vm.run();
+    assert_eq!(vm.ds.peek().unwrap().as_int(), -128); // 0x80 = -128
+
+    let mut vm = Vm::<NullPlatform>::new(NullPlatform);
+    let buf_idx = vm.buffers.alloc_from(&[0x7F, 0x80, 0xE0]).unwrap();
+    vm.load(&[Op::BufGetI8, Op::Halt]);
+    vm.ds.push(Value::Buf(buf_idx)).unwrap();
+    vm.ds.push(Value::I(2)).unwrap();
+    vm.run();
+    assert_eq!(vm.ds.peek().unwrap().as_int(), -32); // 0xE0 = -32
+}
+
+#[test]
+fn test_buf_get_u16be() {
+    let mut vm = Vm::<NullPlatform>::new(NullPlatform);
+    // BE: 0x12, 0x34 → 0x1234
+    let buf_idx = vm.buffers.alloc_from(&[0x12, 0x34]).unwrap();
+    vm.load(&[Op::BufGetU16Be, Op::Halt]);
+    vm.ds.push(Value::Buf(buf_idx)).unwrap();
+    vm.ds.push(Value::I(0)).unwrap();
+    vm.run();
+    assert_eq!(vm.ds.peek().unwrap().as_int(), 0x1234);
+}
+
+#[test]
+fn test_buf_get_i16be_negative() {
+    let mut vm = Vm::<NullPlatform>::new(NullPlatform);
+    // -200 as i16 BE = 0xFF38 → bytes [0xFF, 0x38]
+    let buf_idx = vm.buffers.alloc_from(&[0xFF, 0x38]).unwrap();
+    vm.load(&[Op::BufGetI16Be, Op::Halt]);
+    vm.ds.push(Value::Buf(buf_idx)).unwrap();
+    vm.ds.push(Value::I(0)).unwrap();
+    vm.run();
+    assert_eq!(vm.ds.peek().unwrap().as_int(), -200);
+}
+
+#[test]
+fn test_buf_get_u8_out_of_bounds() {
+    let mut vm = Vm::<NullPlatform>::new(NullPlatform);
+    let buf_idx = vm.buffers.alloc(4).unwrap();
+    vm.load(&[Op::BufGetU8]);
+    vm.ds.push(Value::Buf(buf_idx)).unwrap();
+    vm.ds.push(Value::I(10)).unwrap(); // out of bounds
+    let result = vm.run();
+    assert_eq!(result, StepResult::Error(VmError::TypeMismatch));
+}
+
+#[test]
+fn test_buf_roundtrip_via_parse() {
+    let mut strings = StringPool::<2048, 128>::new();
+    let mut dict = Dict::<64>::new();
+    let input = "LIT 4 BUF_ALLOC DUP LIT 0 LIT 42 BUF_SET_U8 LIT 0 BUF_GET_U8 HALT";
+    let result = parse(input, &mut strings, &mut dict).unwrap();
+
+    let mut vm = Vm::<NullPlatform>::new(NullPlatform);
+    vm.strings = strings;
+    vm.load(&result.ops[..result.len]);
+    vm.program_len = result.len;
+    vm.run();
+    assert_eq!(vm.ds.peek().unwrap().as_int(), 42);
+}
+
+// ---- Math: FLog / FSqrt ----
+
+#[test]
+fn test_flog() {
+    let vm = run_ops(&[Op::FLit(1.0), Op::FLog, Op::Halt]);
+    assert!((vm.ds.peek().unwrap().as_float() - 0.0).abs() < 0.01, "ln(1) should be ~0");
+
+    let vm = run_ops(&[Op::FLit(2.718282), Op::FLog, Op::Halt]);
+    let result = vm.ds.peek().unwrap().as_float();
+    assert!((result - 1.0).abs() < 0.01, "ln(e) should be ~1, got {}", result);
+}
+
+#[test]
+fn test_flog_large_values() {
+    // ln(1000) ≈ 6.9078
+    let vm = run_ops(&[Op::FLit(1000.0), Op::FLog, Op::Halt]);
+    let result = vm.ds.peek().unwrap().as_float();
+    assert!((result - 6.9078).abs() < 0.05, "ln(1000) should be ~6.9078, got {}", result);
+}
+
+#[test]
+fn test_flog_negative() {
+    let vm = run_ops(&[Op::FLit(-1.0), Op::FLog, Op::Halt]);
+    assert!(vm.ds.peek().unwrap().as_float().is_infinite());
+}
+
+#[test]
+fn test_fsqrt() {
+    let vm = run_ops(&[Op::FLit(4.0), Op::FSqrt, Op::Halt]);
+    let result = vm.ds.peek().unwrap().as_float();
+    assert!((result - 2.0).abs() < 0.01, "sqrt(4) should be ~2, got {}", result);
+
+    let vm = run_ops(&[Op::FLit(2.0), Op::FSqrt, Op::Halt]);
+    let result = vm.ds.peek().unwrap().as_float();
+    assert!((result - 1.4142).abs() < 0.01, "sqrt(2) should be ~1.414, got {}", result);
+}
+
+#[test]
+fn test_fsqrt_zero() {
+    let vm = run_ops(&[Op::FLit(0.0), Op::FSqrt, Op::Halt]);
+    assert_eq!(vm.ds.peek().unwrap().as_float(), 0.0);
+}
+
+#[test]
+fn test_flog_fsqrt_parse() {
+    let mut strings = StringPool::<2048, 128>::new();
+    let mut dict = Dict::<64>::new();
+    let input = "FLIT 100.0 FSQRT HALT";
+    let result = parse(input, &mut strings, &mut dict).unwrap();
+
+    let mut vm = Vm::<NullPlatform>::new(NullPlatform);
+    vm.load(&result.ops[..result.len]);
+    vm.program_len = result.len;
+    vm.run();
+    let val = vm.ds.peek().unwrap().as_float();
+    assert!((val - 10.0).abs() < 0.01, "sqrt(100) should be ~10, got {}", val);
+}
+
+// ---- BME680 example parsing ----
+
+#[test]
+fn test_parse_bme680_temp_example() {
+    let input = include_str!("../examples/bme680_temp.spore");
+    let mut strings = StringPool::<4096, 256>::new();
+    let mut dict = Dict::<64>::new();
+    let result = parse(input, &mut strings, &mut dict);
+    assert!(
+        result.is_ok(),
+        "BME680 temp example should parse: {:?}",
+        result.err()
+    );
+    let result = result.unwrap();
+    assert!(result.entry.is_some(), "main entry should be found");
+    // Print op count for reference (visible with --nocapture)
+    eprintln!("bme680_temp: {} ops / 1024", result.len);
+    assert!(result.len < 1024, "should fit in program space: {} ops", result.len);
+}
+
+#[test]
+fn test_parse_bme680_thp_example() {
+    let input = include_str!("../examples/bme680_thp.spore");
+    let mut strings = StringPool::<4096, 256>::new();
+    let mut dict = Dict::<64>::new();
+    let result = parse(input, &mut strings, &mut dict);
+    assert!(
+        result.is_ok(),
+        "BME680 THP example should parse: {:?}",
+        result.err()
+    );
+    let result = result.unwrap();
+    assert!(result.entry.is_some(), "main entry should be found");
+    eprintln!("bme680_thp: {} ops / 1024", result.len);
+    assert!(result.len < 1024, "should fit in program space: {} ops", result.len);
+}
+
 // ---- Parse the full cactus monitor example from the spec ----
 
 #[test]
@@ -705,11 +932,6 @@ fn test_parse_cactus_monitor() {
     let mut strings = StringPool::<4096, 256>::new();
     let mut dict = Dict::<64>::new();
     let input = r#"
-        DEF read_bme
-          LIT 0x76 I2C_ADDR
-          BME_READ
-        END
-
         DEF check_alert
           DUP FLIT 35.0 GT
           IF
@@ -727,8 +949,7 @@ fn test_parse_cactus_monitor() {
 
         TASK sensor_loop
           EVERY 30000
-            read_bme
-            check_alert
+            FLIT 25.0 check_alert
           ENDEVERY
         ENDTASK
 

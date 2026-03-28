@@ -128,13 +128,17 @@ just clean          # Clean build artifacts
 picoagent includes **spore-core**, a tiny stack-based VM for AI-generated embedded programs. Claude generates Spore token streams that run directly on the ESP32 — cooperative multitasking, GPIO/I2C/SPI/BLE/MQTT, event-driven tasks, all in `#![no_std]` with zero allocations.
 
 ```
-DEF read_sensor
-  LIT 0x76 I2C_ADDR BME_READ
+DEF read_temp
+  LIT 0x76 I2C_ADDR
+  LIT 0xFA I2C_WRITE LIT 3 I2C_READ_BUF
+  DUP LIT 0 BUF_GET_U8 LIT 12 SHL
+  SWAP DUP LIT 1 BUF_GET_U8 LIT 4 SHL OR
+  SWAP LIT 2 BUF_GET_U8 LIT 4 SHR OR
 END
 
 TASK monitor
   EVERY 30000
-    read_sensor
+    read_temp I>F FLIT 5120.0 DIV
     DUP FLIT 35.0 GT IF
       STR "alert/temp" SWAP F>STR MQTT_PUB
     THEN

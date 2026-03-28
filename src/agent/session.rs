@@ -78,6 +78,7 @@ ROT (a b c -- b c a) | NIP (a b -- b) | TUCK (a b -- b a b)
 ADD SUB MUL DIV MOD — pop two, push result. Float auto-promotes.
 ABS NEG — pop one, push result.
 MIN MAX — pop two, push lesser/greater.
+FLOG — (float -- float) natural logarithm. FSQRT — (float -- float) square root.
 
 ## Comparison (a b -- bool)
 EQ NEQ GT LT GTE LTE — push TRUE/FALSE.
@@ -123,13 +124,24 @@ LIT <pin> ADC_READ — (pin -- raw_value) read ADC.
 LIT <pin> LIT <freq_hz> PWM_INIT — initialize PWM on pin.
 LIT <pin> LIT <duty> PWM_DUTY — set duty 0-1023.
 
+## Buffers
+LIT <size> BUF_ALLOC — (size -- buf) allocate zero-initialized buffer.
+<buf> LIT <off> BUF_GET_U8 — (buf offset -- u8) read unsigned byte.
+<buf> LIT <off> BUF_GET_I8 — (buf offset -- i8) read signed byte (sign-extended).
+<buf> LIT <off> LIT <val> BUF_SET_U8 — (buf offset value --) write byte.
+<buf> LIT <off> BUF_GET_U16LE — (buf offset -- u16) little-endian unsigned 16-bit.
+<buf> LIT <off> BUF_GET_I16LE — (buf offset -- i16) little-endian signed 16-bit.
+<buf> LIT <off> BUF_GET_U16BE — (buf offset -- u16) big-endian unsigned 16-bit.
+<buf> LIT <off> BUF_GET_I16BE — (buf offset -- i16) big-endian signed 16-bit.
+<buf> BUF_LEN — (buf -- len) get buffer length.
+
 ## I2C (SDA=8, SCL=9 on this board)
 LIT <addr> I2C_ADDR — set slave address (7-bit).
 LIT <byte> I2C_WRITE — write one byte.
 I2C_READ — ( -- byte) read one byte.
-<buf> I2C_WRITE_BUF — write buffer.
-LIT <len> I2C_READ_BUF — ( -- buf) read into new buffer.
-LIT <addr> I2C_ADDR BME_READ — ( -- temp hum pressure) read BME280 sensor (floats).
+<buf> I2C_WRITE_BUF — write buffer contents as I2C data.
+LIT <len> I2C_READ_BUF — ( -- buf) read len bytes into new buffer.
+
 
 ## SPI
 LIT <clk> LIT <mosi> LIT <miso> LIT <cs> SPI_INIT
@@ -159,11 +171,55 @@ HEAP_FREE ( -- bytes) | STR \"msg\" LOG — print to device log.
 Blink LED on pin 2:
 TASK main LIT 2 LIT 1 GPIO_MODE LOOP LIT 2 GPIO_TOGGLE LIT 500 DELAY_MS ENDLOOP ENDTASK
 
-Read temperature and log:
-LIT 0x76 I2C_ADDR BME_READ DROP DROP F>STR LOG
+Read I2C register and log:
+LIT 0x76 I2C_ADDR LIT 0xD0 I2C_WRITE I2C_READ I>STR LOG
 
 Conditional with variable:
-VAR count LIT 0 STORE count LIT 10 TIMES FETCH count LIT 1 ADD STORE count ENDTIMES FETCH count I>STR LOG";
+VAR count LIT 0 STORE count LIT 10 TIMES FETCH count LIT 1 ADD STORE count ENDTIMES FETCH count I>STR LOG
+
+## Writing I2C Sensor Drivers in Spore
+Use buffer ops + DEF words to implement any I2C sensor without firmware changes.
+
+Pattern — bulk register read into buffer, then extract fields:
+\\ Read N calibration bytes in one I2C transaction
+DEF read_cal
+  LIT 0x76 I2C_ADDR        \\ set sensor address
+  LIT 0xE1 I2C_WRITE       \\ write register start address
+  LIT 25 I2C_READ_BUF      \\ read 25 bytes → buf on stack
+END
+
+\\ Extract 16-bit LE calibration params from buffer
+DEF extract_cal
+  DUP LIT 0 BUF_GET_U16LE STORE par_t1
+  DUP LIT 2 BUF_GET_I16LE STORE par_t2
+  DUP LIT 4 BUF_GET_I16LE STORE par_t3
+  DROP
+END
+
+Pattern — write config registers via buffer:
+DEF write_cfg
+  LIT 3 BUF_ALLOC          \\ alloc 3-byte buffer
+  DUP LIT 0 LIT 0x74 BUF_SET_U8  \\ register addr
+  DUP LIT 1 LIT 0x27 BUF_SET_U8  \\ config byte 1
+  DUP LIT 2 LIT 0x00 BUF_SET_U8  \\ config byte 2
+  I2C_WRITE_BUF
+END
+
+Pattern — temperature compensation (BME-style):
+DEF compensate_temp
+  \\ raw_temp on stack, cal params in variables
+  I>F FLIT 16384.0 DIV FETCH par_t1 I>F FLIT 1024.0 DIV SUB
+  FETCH par_t2 I>F MUL       \\ var1
+  \\ ... continue compensation math using float ops
+END
+
+Key tips for sensor drivers:
+- Use I2C_READ_BUF for bulk reads (one transaction vs N individual reads)
+- Use BUF_GET_U16LE / BUF_GET_I16LE to extract multi-byte register values
+- Use BUF_ALLOC + BUF_SET_U8 + I2C_WRITE_BUF to send multi-byte configs
+- Factor repeated patterns into DEF words to save program space (2048 ops max)
+- Use FLOG for gas resistance compensation (BME680), FSQRT for RMS calculations
+- Store calibration coefficients in variables (64 slots available)";
 
 /// A conversation session with compaction support.
 pub struct Session {

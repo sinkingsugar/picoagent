@@ -23,7 +23,7 @@ pub const DEVICE_LABEL: &str = match option_env!("DEVICE_LABEL") {
 
 // Agent limits
 pub const MAX_TOOL_ITERATIONS: u32 = 15;
-pub const MAX_RESPONSE_TOKENS: u32 = 2048;
+pub const MAX_RESPONSE_TOKENS: u32 = 4096;
 
 // Spore language reference in system prompt (set SPORE_PROMPT=0 to disable)
 pub const SPORE_PROMPT_ENABLED: bool = {

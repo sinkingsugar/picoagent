@@ -31,9 +31,9 @@ pub enum StepResult {
 /// - `RS`: Return stack depth (default 32)
 /// - `STR_BYTES`: String pool byte capacity (default 2048)
 /// - `STR_COUNT`: Max interned strings (default 128)
-/// - `BUF_BYTES`: Buffer pool byte capacity (default 1024)
+/// - `BUF_BYTES`: Buffer pool byte capacity (default 4096)
 /// - `BUF_COUNT`: Max allocated buffers (default 32)
-/// - `PROG`: Program capacity in ops (default 1024)
+/// - `PROG`: Program capacity in ops (default 2048)
 /// - `VARS`: Variable slot count (default 64)
 pub struct Vm<
     P: Platform,
@@ -41,9 +41,9 @@ pub struct Vm<
     const RS: usize = 32,
     const STR_BYTES: usize = 2048,
     const STR_COUNT: usize = 128,
-    const BUF_BYTES: usize = 1024,
+    const BUF_BYTES: usize = 4096,
     const BUF_COUNT: usize = 32,
-    const PROG: usize = 1024,
+    const PROG: usize = 2048,
     const VARS: usize = 64,
 > {
     pub ds: Stack<DS>,
@@ -562,6 +562,96 @@ impl<
                 self.platform.pwm_duty(pin, duty)?;
             }
 
+            // --- Buffer access ---
+            Op::BufAlloc => {
+                let size = self.ds.pop()?.as_int() as usize;
+                let idx = self.buffers.alloc(size)?;
+                self.ds.push(Value::Buf(idx))?;
+            }
+            Op::BufGetU8 => {
+                let offset = self.ds.pop()?.as_int() as usize;
+                let buf_idx = self.ds.pop()?.as_buf_index().ok_or(VmError::TypeMismatch)?;
+                let data = self.buffers.get(buf_idx).ok_or(VmError::TypeMismatch)?;
+                if offset >= data.len() {
+                    return Err(VmError::TypeMismatch);
+                }
+                self.ds.push(Value::I(data[offset] as i32))?;
+            }
+            Op::BufGetI8 => {
+                let offset = self.ds.pop()?.as_int() as usize;
+                let buf_idx = self.ds.pop()?.as_buf_index().ok_or(VmError::TypeMismatch)?;
+                let data = self.buffers.get(buf_idx).ok_or(VmError::TypeMismatch)?;
+                if offset >= data.len() {
+                    return Err(VmError::TypeMismatch);
+                }
+                self.ds.push(Value::I(data[offset] as i8 as i32))?;
+            }
+            Op::BufSetU8 => {
+                let value = self.ds.pop()?.as_int() as u8;
+                let offset = self.ds.pop()?.as_int() as usize;
+                let buf_idx = self.ds.pop()?.as_buf_index().ok_or(VmError::TypeMismatch)?;
+                let data = self.buffers.get_mut(buf_idx).ok_or(VmError::TypeMismatch)?;
+                if offset >= data.len() {
+                    return Err(VmError::TypeMismatch);
+                }
+                data[offset] = value;
+            }
+            Op::BufGetU16Le => {
+                let offset = self.ds.pop()?.as_int() as usize;
+                let buf_idx = self.ds.pop()?.as_buf_index().ok_or(VmError::TypeMismatch)?;
+                let data = self.buffers.get(buf_idx).ok_or(VmError::TypeMismatch)?;
+                if offset + 1 >= data.len() {
+                    return Err(VmError::TypeMismatch);
+                }
+                let val = (data[offset] as u16) | ((data[offset + 1] as u16) << 8);
+                self.ds.push(Value::I(val as i32))?;
+            }
+            Op::BufGetI16Le => {
+                let offset = self.ds.pop()?.as_int() as usize;
+                let buf_idx = self.ds.pop()?.as_buf_index().ok_or(VmError::TypeMismatch)?;
+                let data = self.buffers.get(buf_idx).ok_or(VmError::TypeMismatch)?;
+                if offset + 1 >= data.len() {
+                    return Err(VmError::TypeMismatch);
+                }
+                let val = (data[offset] as u16) | ((data[offset + 1] as u16) << 8);
+                self.ds.push(Value::I(val as i16 as i32))?;
+            }
+            Op::BufGetU16Be => {
+                let offset = self.ds.pop()?.as_int() as usize;
+                let buf_idx = self.ds.pop()?.as_buf_index().ok_or(VmError::TypeMismatch)?;
+                let data = self.buffers.get(buf_idx).ok_or(VmError::TypeMismatch)?;
+                if offset + 1 >= data.len() {
+                    return Err(VmError::TypeMismatch);
+                }
+                let val = ((data[offset] as u16) << 8) | (data[offset + 1] as u16);
+                self.ds.push(Value::I(val as i32))?;
+            }
+            Op::BufGetI16Be => {
+                let offset = self.ds.pop()?.as_int() as usize;
+                let buf_idx = self.ds.pop()?.as_buf_index().ok_or(VmError::TypeMismatch)?;
+                let data = self.buffers.get(buf_idx).ok_or(VmError::TypeMismatch)?;
+                if offset + 1 >= data.len() {
+                    return Err(VmError::TypeMismatch);
+                }
+                let val = ((data[offset] as u16) << 8) | (data[offset + 1] as u16);
+                self.ds.push(Value::I(val as i16 as i32))?;
+            }
+            Op::BufLen => {
+                let buf_idx = self.ds.pop()?.as_buf_index().ok_or(VmError::TypeMismatch)?;
+                let len = self.buffers.buf_len(buf_idx).ok_or(VmError::TypeMismatch)?;
+                self.ds.push(Value::I(len as i32))?;
+            }
+
+            // --- Math ---
+            Op::FLog => {
+                let v = self.ds.pop()?.as_float();
+                self.ds.push(Value::F(ln_approx(v)))?;
+            }
+            Op::FSqrt => {
+                let v = self.ds.pop()?.as_float();
+                self.ds.push(Value::F(sqrt_approx(v)))?;
+            }
+
             // --- Platform: I2C ---
             Op::PI2cAddr => {
                 let addr = self.ds.pop()?.as_int();
@@ -587,13 +677,6 @@ impl<
                 self.platform.i2c_read_buf(data)?;
                 self.ds.push(Value::Buf(buf_idx))?;
             }
-            Op::PBmeRead => {
-                let (temp, hum, pres) = self.platform.bme_read()?;
-                self.ds.push(Value::F(temp))?;
-                self.ds.push(Value::F(hum))?;
-                self.ds.push(Value::F(pres))?;
-            }
-
             // --- Platform: SPI ---
             Op::PSpiInit => {
                 let cs = self.ds.pop()?.as_int();
@@ -817,6 +900,46 @@ fn format_i32(v: i32, buf: &mut [u8; 12]) -> &str {
     }
 
     unsafe { core::str::from_utf8_unchecked(&buf[pos..]) }
+}
+
+/// Approximate natural logarithm (ln) for f32.
+///
+/// Uses the identity: ln(x) = (exponent - 127) * ln(2) + ln(mantissa)
+/// with a Remez-style polynomial for ln(m) on [1, 2).
+/// Accurate to <0.001 relative error across the f32 range.
+fn ln_approx(x: f32) -> f32 {
+    if x <= 0.0 {
+        return f32::NEG_INFINITY;
+    }
+    let bits = x.to_bits();
+    let exp = ((bits >> 23) & 0xFF) as i32 - 127;
+    // Reconstruct mantissa in [1, 2)
+    let m_bits = (bits & 0x007F_FFFF) | 0x3F80_0000;
+    let m = f32::from_bits(m_bits);
+    // Remap to [-1/3, 1/3] range for better convergence: let s = (m-1)/(m+1)
+    // Then ln(m) = 2 * (s + s³/3 + s⁵/5 + s⁷/7)
+    let s = (m - 1.0) / (m + 1.0);
+    let s2 = s * s;
+    let ln_m = 2.0 * s * (1.0 + s2 * (0.333333 + s2 * (0.2 + s2 * 0.142857)));
+    exp as f32 * 0.6931472 + ln_m
+}
+
+/// Approximate square root for f32.
+///
+/// Uses the "fast inverse square root" bit trick followed by Newton-Raphson
+/// iterations, then multiplies by x to get sqrt instead of 1/sqrt.
+fn sqrt_approx(x: f32) -> f32 {
+    if x <= 0.0 {
+        return 0.0;
+    }
+    // Initial guess via bit manipulation (Quake III style)
+    let i = x.to_bits();
+    let guess = f32::from_bits(0x5F37_5A86 - (i >> 1)); // ≈ 1/sqrt(x)
+    // Two Newton-Raphson refinements: y = y * (1.5 - 0.5*x*y*y)
+    let half_x = 0.5 * x;
+    let y = guess * (1.5 - half_x * guess * guess);
+    let y = y * (1.5 - half_x * y * y);
+    x * y // x * (1/sqrt(x)) = sqrt(x)
 }
 
 /// Format f32 into a fixed buffer with 2 decimal places.
